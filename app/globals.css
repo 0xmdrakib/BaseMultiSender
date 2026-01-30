@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  min-height: 100%;
+}
+
+html {
+  background-color: #09090b;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #09090b;
+  background: radial-gradient(1200px 600px at 20% 10%, rgba(255,255,255,0.06), transparent 60%),
+  radial-gradient(900px 500px at 80% 20%, rgba(255,255,255,0.04), transparent 55%),
+  linear-gradient(to bottom, #09090b, #09090b);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+/* Make the app feel crisp */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Dark, consistent scrollbars (only where applied) */
+.scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.18) rgba(255,255,255,0.06);
+}
+.scrollbar-dark::-webkit-scrollbar { width: 10px; height: 10px; }
+.scrollbar-dark::-webkit-scrollbar-track { background: rgba(255,255,255,0.06); border-radius: 9999px; }
+.scrollbar-dark::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 9999px; border: 2px solid rgba(0,0,0,0.35); }
+.scrollbar-dark::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+.scrollbar-dark::-webkit-scrollbar-corner { background: transparent; }
