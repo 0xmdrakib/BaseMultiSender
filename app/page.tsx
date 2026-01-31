@@ -500,14 +500,18 @@ export default function Home() {
         spender: MULTISENDER_ADDRESS,
         sigDeadline,
       };
+      const { domain, types, values } = AllowanceTransfer.getPermitData(
+        permitSingle as any,
+        PERMIT2_ADDRESS,
+        chainId ?? base.id
+      ) as any;
 
-      const permitData = AllowanceTransfer.getPermitData(permitSingle as any, PERMIT2_ADDRESS, chainId ?? base.id);
-
+      // Permit2 SDK returns { domain, types, values }. viem/wagmi requires an explicit primaryType.
       const signature = await signTypedDataAsync({
-        domain: permitData.domain,
-        types: permitData.types,
-        primaryType: permitData.primaryType,
-        message: permitData.values,
+        domain,
+        types,
+        primaryType: "PermitSingle",
+        message: values,
       } as any);
 
       setStatus("Submitting transaction…");
