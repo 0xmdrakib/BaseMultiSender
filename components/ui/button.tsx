@@ -2,7 +2,9 @@ import * as React from "react";
 import { cn } from "./cn";
 
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  // Keep this in sync with usage across the app.
+  // "outline" is used for bordered actions (Upload / Reset / Explorer etc.).
+  variant?: "primary" | "secondary" | "ghost" | "outline" | "danger";
   size?: "sm" | "md";
 };
 
@@ -21,6 +23,8 @@ export function Button({
     primary: "bg-white text-black hover:bg-zinc-200",
     secondary: "bg-white/10 text-zinc-100 hover:bg-white/15 border border-white/10",
     ghost: "bg-transparent hover:bg-white/10 border border-transparent",
+    outline:
+      "bg-transparent text-zinc-100 hover:bg-white/10 border border-white/15",
     danger: "bg-red-500/15 text-red-100 hover:bg-red-500/20 border border-red-500/20",
   };
 
