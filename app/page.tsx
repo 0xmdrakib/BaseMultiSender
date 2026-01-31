@@ -362,7 +362,9 @@ export default function Home() {
             args: [recipients, amounts],
           });
           // viem/op-stack will do the correct L1-fee estimation on OP Stack chains.
-          l1Fee = await l2.estimateL1Fee({ to: MULTISENDER_ADDRESS, data, gas, gasPrice, value: total });
+          // estimateL1Fee does NOT take `gas` or legacy `gasPrice` (it only needs account/to/data/value,
+          // plus optional EIP-1559 fields). Passing `gas`/`gasPrice` breaks typechecking in CI builds.
+          l1Fee = await l2.estimateL1Fee({ account: address, to: MULTISENDER_ADDRESS, data, value: total });
         } catch {
           // If extension isn't available, we still show L2 fee (still a useful approximation).
           l1Fee = 0n;
