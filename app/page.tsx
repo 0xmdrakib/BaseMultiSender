@@ -1,1108 +1,968 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
-import Papa from "papaparse";
-import { z } from "zod";
-import { AllowanceTransfer } from "@uniswap/permit2-sdk";
-import { useAccount, usePublicClient, useWalletClient, useSwitchChain } from "wagmi";
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAccount, usePublicClient, useReadContract, useSignTypedData, useWriteContract } from "wagmi";
+import { base } from "wagmi/chains";
 import {
   encodeFunctionData,
+  formatEther,
   formatUnits,
+  getAddress,
   isAddress,
+  parseEther,
   parseUnits,
-  parseEventLogs,
-  type Hex,
+  type Address,
 } from "viem";
-import {
-  Copy,
-  ExternalLink,
-  Info,
-  Loader2,
-  ShieldCheck,
-  Upload,
-  RotateCcw,
-  ArrowRight,
-} from "lucide-react";
+import { publicActionsL2 } from "viem/op-stack";
+import { AllowanceTransfer } from "@uniswap/permit2-sdk";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ReceiptTable, type ReceiptRow } from "@/components/ReceiptTable";
-import { cn } from "@/components/ui/cn";
+import { Input } from "@/components/ui/input";
+import { Copy, ExternalLink, Loader2, Upload } from "lucide-react";
+import WalletConnectButton from "@/components/WalletConnect";
 
-const WalletConnect = dynamic(() => import("@/components/WalletConnect"), { ssr: false });
+// ---------- Config (env first, with safe fallbacks) ----------
+const MULTISENDER_ADDRESS = (process.env.NEXT_PUBLIC_MULTISENDER_ADDRESS ||
+  "0xAd7d4483Eb4352B71aCc8C3C81482079b0636d55") as Address;
 
-const CHAIN_ID = 8453;
-const EXPLORER_TX = "https://basescan.org/tx/";
+const PERMIT2_ADDRESS = (process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ||
+  "0x000000000022D473030F116dDEE9F6B43aC78BA3") as Address;
 
-const MULTISENDER = (process.env.NEXT_PUBLIC_MULTISENDER_ADDRESS ?? "") as `0x${string}`;
-const PERMIT2 = (process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ?? "0x000000000022D473030F116dDEE9F6B43aC78BA3") as `0x${string}`;
+// BaseScan (mainnet)
+const EXPLORER_TX = (hash: string) => `https://basescan.org/tx/${hash}`;
+const EXPLORER_ADDR = (addr: string) => `https://basescan.org/address/${addr}`;
 
-const MAX_UINT256 = 2n ** 256n - 1n;
-const MAX_UINT160 = 2n ** 160n - 1n;
-const decimalRegex = /^\d+(?:\.\d+)?$/;
-
-const rowSchema = z.object({
-  address: z.string().refine((v) => isAddress(v), "Invalid address"),
-  amount: z.string().refine((v) => decimalRegex.test(v), "Invalid amount"),
-});
+// ---------- ABIs ----------
+const multisenderAbi = [
+  {
+    type: "function",
+    name: "sendETH",
+    stateMutability: "payable",
+    inputs: [
+      { name: "recipients", type: "address[]" },
+      { name: "amounts", type: "uint256[]" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "sendERC20Permit2",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "permitSingle",
+        type: "tuple",
+        components: [
+          {
+            name: "details",
+            type: "tuple",
+            components: [
+              { name: "token", type: "address" },
+              { name: "amount", type: "uint160" },
+              { name: "expiration", type: "uint48" },
+              { name: "nonce", type: "uint48" },
+            ],
+          },
+          { name: "spender", type: "address" },
+          { name: "sigDeadline", type: "uint256" },
+        ],
+      },
+      { name: "signature", type: "bytes" },
+      { name: "recipients", type: "address[]" },
+      { name: "amounts", type: "uint256[]" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "BatchETH",
+    inputs: [
+      { name: "sender", type: "address", indexed: true },
+      { name: "recipients", type: "uint256", indexed: false },
+      { name: "total", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "BatchERC20",
+    inputs: [
+      { name: "sender", type: "address", indexed: true },
+      { name: "token", type: "address", indexed: true },
+      { name: "recipients", type: "uint256", indexed: false },
+      { name: "total", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+] as const;
 
 const erc20Abi = [
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
   { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
-  { type: "function", name: "allowance", stateMutability: "view", inputs: [{ type: "address", name: "owner" }, { type: "address", name: "spender" }], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "approve", stateMutability: "nonpayable", inputs: [{ type: "address", name: "spender" }, { type: "uint256", name: "amount" }], outputs: [{ type: "bool" }] },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
 ] as const;
 
-// allowance(owner, token, spender) -> (amount, expiration, nonce)
 const permit2Abi = [
   {
     type: "function",
     name: "allowance",
     stateMutability: "view",
     inputs: [
-      { type: "address", name: "owner" },
-      { type: "address", name: "token" },
-      { type: "address", name: "spender" },
+      { name: "owner", type: "address" },
+      { name: "token", type: "address" },
+      { name: "spender", type: "address" },
     ],
     outputs: [
-      { type: "uint160", name: "amount" },
-      { type: "uint48", name: "expiration" },
-      { type: "uint48", name: "nonce" },
+      { name: "amount", type: "uint160" },
+      { name: "expiration", type: "uint48" },
+      { name: "nonce", type: "uint48" },
     ],
   },
 ] as const;
 
-const multisenderAbi = [
-  // functions
-  {
-    type: "function",
-    name: "sendETHStrict",
-    stateMutability: "payable",
-    inputs: [
-      { type: "address[]", name: "recipients" },
-      { type: "uint256[]", name: "amounts" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "sendETHBestEffort",
-    stateMutability: "payable",
-    inputs: [
-      { type: "address[]", name: "recipients" },
-      { type: "uint256[]", name: "amounts" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "sendERC20Permit2Strict",
-    stateMutability: "nonpayable",
-    inputs: [
-      {
-        name: "permitSingle",
-        type: "tuple",
-        components: [
-          {
-            name: "details",
-            type: "tuple",
-            components: [
-              { name: "token", type: "address" },
-              { name: "amount", type: "uint160" },
-              { name: "expiration", type: "uint48" },
-              { name: "nonce", type: "uint48" },
-            ],
-          },
-          { name: "spender", type: "address" },
-          { name: "sigDeadline", type: "uint256" },
-        ],
-      },
-      { name: "signature", type: "bytes" },
-      { type: "address[]", name: "recipients" },
-      { type: "uint256[]", name: "amounts" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "sendERC20Permit2BestEffort",
-    stateMutability: "nonpayable",
-    inputs: [
-      {
-        name: "permitSingle",
-        type: "tuple",
-        components: [
-          {
-            name: "details",
-            type: "tuple",
-            components: [
-              { name: "token", type: "address" },
-              { name: "amount", type: "uint160" },
-              { name: "expiration", type: "uint48" },
-              { name: "nonce", type: "uint48" },
-            ],
-          },
-          { name: "spender", type: "address" },
-          { name: "sigDeadline", type: "uint256" },
-        ],
-      },
-      { name: "signature", type: "bytes" },
-      { type: "address[]", name: "recipients" },
-      { type: "uint256[]", name: "amounts" },
-    ],
-    outputs: [],
-  },
+// ---------- Helpers ----------
+type Mode = "ETH" | "ERC20";
 
-  // events
-  {
-    type: "event",
-    name: "ETH_Item",
-    inputs: [
-      { indexed: true, name: "index", type: "uint256" },
-      { indexed: true, name: "to", type: "address" },
-      { indexed: false, name: "amount", type: "uint256" },
-      { indexed: false, name: "success", type: "bool" },
-      { indexed: false, name: "returnDataTruncated", type: "bytes" },
-    ],
-  },
-  {
-    type: "event",
-    name: "ERC20_Item",
-    inputs: [
-      { indexed: true, name: "index", type: "uint256" },
-      { indexed: true, name: "token", type: "address" },
-      { indexed: true, name: "to", type: "address" },
-      { indexed: false, name: "amount", type: "uint256" },
-      { indexed: false, name: "success", type: "bool" },
-      { indexed: false, name: "returnDataTruncated", type: "bytes" },
-    ],
-  },
-  {
-    type: "event",
-    name: "BatchSummary",
-    inputs: [
-      { indexed: true, name: "sender", type: "address" },
-      { indexed: true, name: "token", type: "address" },
-      { indexed: false, name: "totalRequested", type: "uint256" },
-      { indexed: false, name: "successCount", type: "uint256" },
-      { indexed: false, name: "failCount", type: "uint256" },
-      { indexed: false, name: "unsentOrRefundedAmount", type: "uint256" },
-      { indexed: false, name: "strictMode", type: "bool" },
-    ],
-  },
-] as const;
-
-function shortAddr(a?: string) {
-  if (!a) return "";
-  return a.slice(0, 6) + "…" + a.slice(-4);
+function shortAddr(addr?: string) {
+  if (!addr) return "";
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function nowSeconds() {
-  return Math.floor(Date.now() / 1000);
-}
-function deadline(secondsFromNow: number) {
-  return nowSeconds() + secondsFromNow;
-}
-
-function decodeRevertLike(dataHex?: Hex) {
-  if (!dataHex || dataHex === "0x") return "No reason";
-  if (dataHex.startsWith("0x08c379a0")) return "Error(string)";
-  if (dataHex.startsWith("0x4e487b71")) return "Panic";
-  return "Custom/unknown";
+function formatFeeEth(wei?: bigint) {
+  if (wei === undefined) return "—";
+  // show up to 6 decimals in ETH, but keep small values readable
+  const eth = Number(formatEther(wei));
+  if (!isFinite(eth)) return `${formatEther(wei)} ETH`;
+  if (eth === 0) return "0 ETH";
+  if (eth < 0.000001) return `< 0.000001 ETH`;
+  return `${eth.toFixed(6)} ETH`;
 }
 
-function friendlyError(err: any) {
-  const msg = String(err?.shortMessage || err?.message || err);
-  const code = err?.code ?? err?.cause?.code;
-
-  if (code === 4001 || /User denied|User rejected|denied transaction signature/i.test(msg)) {
-    return "You cancelled the wallet confirmation.";
-  }
-  if (/insufficient funds/i.test(msg)) return "Insufficient funds for amount + gas.";
-  if (/chain/i.test(msg) && /8453|base/i.test(msg)) return "Please switch your wallet to Base mainnet.";
-  return msg;
+function safeParseLines(raw: string) {
+  return raw
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
+    .split("\n");
 }
 
-type ParsedList =
-  | { ok: true; rows: Array<{ address: `0x${string}`; amount: string }>; warnings: string[] }
-  | { ok: false; error: string };
-
-function parseList(raw: string): ParsedList {
-  const warnings: string[] = [];
-  const rows: Array<{ address: `0x${string}`; amount: string }> = [];
-
-  const lines = raw
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+function parseRecipients({
+  raw,
+  mode,
+  decimals,
+}: {
+  raw: string;
+  mode: Mode;
+  decimals?: number;
+}): {
+  recipients: Address[];
+  amounts: bigint[];
+  total: bigint;
+  invalidLine?: string;
+} {
+  const lines = safeParseLines(raw);
+  const recipients: Address[] = [];
+  const amounts: bigint[] = [];
+  let total = 0n;
 
   for (const line of lines) {
-    const parts = line.includes(",") ? line.split(",") : line.split(/\s+/);
-    const a = (parts[0] || "").trim();
-    const amt = (parts[1] || "").trim();
+    const trimmed = line.trim();
+    if (!trimmed) continue;
 
-    const check = rowSchema.safeParse({ address: a, amount: amt });
-    if (!check.success) return { ok: false, error: `Invalid line: "${line}"` };
+    // allow comma or whitespace separators
+    const parts = trimmed.includes(",") ? trimmed.split(",") : trimmed.split(/\s+/);
+    const addrRaw = (parts[0] || "").trim();
+    const amtRaw = (parts[1] || "").trim();
 
-    if (amt === "0" || amt === "0.0") warnings.push("Some amounts look like 0. Double-check.");
-    rows.push({ address: a as `0x${string}`, amount: amt });
+    if (!isAddress(addrRaw)) return { recipients, amounts, total, invalidLine: trimmed };
+    if (!amtRaw) return { recipients, amounts, total, invalidLine: trimmed };
+
+    let amt: bigint;
+    try {
+      if (mode === "ETH") {
+        amt = parseEther(amtRaw);
+      } else {
+        if (decimals === undefined) return { recipients, amounts, total, invalidLine: trimmed };
+        amt = parseUnits(amtRaw, decimals);
+      }
+    } catch {
+      return { recipients, amounts, total, invalidLine: trimmed };
+    }
+
+    if (amt <= 0n) return { recipients, amounts, total, invalidLine: trimmed };
+
+    recipients.push(getAddress(addrRaw));
+    amounts.push(amt);
+    total += amt;
   }
 
-  return { ok: true, rows, warnings };
+  return { recipients, amounts, total };
 }
 
-function fmtEth(eth: string) {
-  const n = Number(eth);
-  if (!Number.isFinite(n)) return eth;
-  if (n === 0) return "0";
-  // Keep readable (no scientific notation)
-  if (n < 0.00000001) return "<0.00000001";
-  return n.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // ignore
+  }
 }
 
-export default function Page() {
-  const { address, chainId } = useAccount();
-  const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
-  const { switchChain, isPending: switching } = useSwitchChain();
+export default function Home() {
+  const { address, chainId, isConnected } = useAccount();
+  const publicClient = usePublicClient({ chainId: base.id });
+
+  const { writeContractAsync } = useWriteContract();
+  const { signTypedDataAsync } = useSignTypedData();
 
   const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const [mode, setMode] = useState<Mode>("ETH");
+
+  // Recipients editor
+  const [rawList, setRawList] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const numsRef = useRef<HTMLDivElement | null>(null);
+
+  // Token
+  const [tokenInput, setTokenInput] = useState("");
+  const tokenAddress = (isAddress(tokenInput) ? (getAddress(tokenInput) as Address) : undefined);
+
+  // Receipt
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  // Fee estimate (ETH is accurate pre-tx; ERC20 is shown right before send)
+  const [feeWei, setFeeWei] = useState<bigint | undefined>(undefined);
+  const [feeLoading, setFeeLoading] = useState(false);
+
+  // Visible editor sizing
+  const visibleLines = 10;
+  const lineHeightPx = 24;
+
+  const lineCount = useMemo(() => {
+    const lines = safeParseLines(rawList);
+    // count at least visibleLines so the editor looks stable
+    return Math.max(visibleLines, lines.length || visibleLines);
+  }, [rawList]);
+
+  // scroll-sync line numbers with textarea
   useEffect(() => {
-    setMounted(true);
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const onScroll = () => {
+      if (numsRef.current) numsRef.current.scrollTop = ta.scrollTop;
+    };
+    ta.addEventListener("scroll", onScroll, { passive: true });
+    return () => ta.removeEventListener("scroll", onScroll);
   }, []);
 
-  const [asset, setAsset] = useState<"ETH" | "ERC20">("ETH");
-  const [strict, setStrict] = useState(true);
-
-  const [rawList, setRawList] = useState("");
-  const parsed = useMemo(() => parseList(rawList), [rawList]);
-
-  const [token, setToken] = useState<`0x${string}`>("0x0000000000000000000000000000000000000000");
-  const [tokenSymbol, setTokenSymbol] = useState<string>("");
-  const [tokenDecimals, setTokenDecimals] = useState<number>(18);
-  const [tokenAllowance, setTokenAllowance] = useState<bigint>(0n);
-
-  const [status, setStatus] = useState<{ kind: "idle" | "loading" | "ok" | "error"; message: string }>({
-    kind: "idle",
-    message: "",
+  const tokenDecimalsRead = useReadContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: "decimals",
+    query: { enabled: !!tokenAddress && mode === "ERC20" },
   });
 
-  const [txHash, setTxHash] = useState<Hex | null>(null);
-  const [summary, setSummary] = useState<{ successCount?: bigint; failCount?: bigint; unsent?: bigint } | null>(null);
-  const [receiptRows, setReceiptRows] = useState<ReceiptRow[]>([]);
+  const tokenSymbolRead = useReadContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: "symbol",
+    query: { enabled: !!tokenAddress && mode === "ERC20" },
+  });
 
-  const [fee, setFee] = useState<{ total?: bigint; gas?: bigint; gasPrice?: bigint } | null>(null);
-  const [feeErr, setFeeErr] = useState<string>("");
+  const decimals = tokenDecimalsRead.data !== undefined ? Number(tokenDecimalsRead.data) : undefined;
+  const symbol = tokenSymbolRead.data || "";
 
-  const onBase = chainId === CHAIN_ID;
+  const parsed = useMemo(() => parseRecipients({ raw: rawList, mode, decimals }), [rawList, mode, decimals]);
+  const recipients = parsed.recipients;
+  const amounts = parsed.amounts;
+  const total = parsed.total;
+  const invalidLine = parsed.invalidLine;
 
-  const recipients = useMemo(() => (parsed.ok ? parsed.rows.map((r) => r.address) : []), [parsed]);
-  const amountsETH = useMemo(
-    () => (parsed.ok ? parsed.rows.map((r) => parseUnits(r.amount, 18)) : []),
-    [parsed]
-  );
-  const amountsToken = useMemo(
-    () => (parsed.ok ? parsed.rows.map((r) => parseUnits(r.amount, tokenDecimals)) : []),
-    [parsed, tokenDecimals]
-  );
+  // Token allowance to Permit2 (on the token contract)
+  const tokenAllowanceToPermit2 = useReadContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: address && tokenAddress ? [address, PERMIT2_ADDRESS] : undefined,
+    query: { enabled: !!address && !!tokenAddress && mode === "ERC20" },
+  });
 
-  const totals = useMemo(() => {
-    if (!parsed.ok) return null;
-    if (asset === "ETH") {
-      const totalWei = amountsETH.reduce((acc, x) => acc + x, 0n);
-      return { totalWei, display: `${fmtEth(formatUnits(totalWei, 18))} ETH` };
+  // Permit2 allowance tuple (gives us nonce for the signature)
+  const permit2Allowance = useReadContract({
+    address: PERMIT2_ADDRESS,
+    abi: permit2Abi,
+    functionName: "allowance",
+    args: address && tokenAddress ? [address, tokenAddress, MULTISENDER_ADDRESS] : undefined,
+    query: { enabled: !!address && !!tokenAddress && mode === "ERC20" },
+  });
+
+  const allowanceToPermit2 = tokenAllowanceToPermit2.data ?? 0n;
+  const permit2Nonce = permit2Allowance.data?.[2] ?? 0; // uint48
+
+  const needsApprove =
+    mode === "ERC20" && tokenAddress && address && total > 0n ? allowanceToPermit2 < total : false;
+
+  // ETH fee estimate (best-effort; wallet shows final)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      setFeeWei(undefined);
+
+      if (!mounted) return;
+      if (!publicClient) return;
+      if (!address) return;
+      if (mode !== "ETH") return;
+      if (recipients.length === 0) return;
+      if (invalidLine) return;
+
+      setFeeLoading(true);
+      try {
+        const gasPrice = await publicClient.getGasPrice();
+        const gas = await publicClient.estimateContractGas({
+          address: MULTISENDER_ADDRESS,
+          abi: multisenderAbi,
+          functionName: "sendETH",
+          args: [recipients, amounts],
+          account: address,
+          value: total,
+        });
+
+        let l1Fee = 0n;
+        try {
+          const l2 = publicClient.extend(publicActionsL2());
+          const data = encodeFunctionData({
+            abi: multisenderAbi,
+            functionName: "sendETH",
+            args: [recipients, amounts],
+          });
+          // viem/op-stack will do the correct L1-fee estimation on OP Stack chains.
+          l1Fee = await l2.estimateL1Fee({ to: MULTISENDER_ADDRESS, data, gas, gasPrice, value: total });
+        } catch {
+          // If extension isn't available, we still show L2 fee (still a useful approximation).
+          l1Fee = 0n;
+        }
+
+        const l2Fee = gas * gasPrice;
+        if (!cancelled) setFeeWei(l2Fee + l1Fee);
+      } catch {
+        if (!cancelled) setFeeWei(undefined);
+      } finally {
+        if (!cancelled) setFeeLoading(false);
+      }
     }
-    const totalWei = amountsToken.reduce((acc, x) => acc + x, 0n);
-    const sym = tokenSymbol || "TOKEN";
-    return { totalWei, display: `${formatUnits(totalWei, tokenDecimals)} ${sym}` };
-  }, [parsed, asset, amountsETH, amountsToken, tokenDecimals, tokenSymbol]);
 
-  const needsApproval = useMemo(() => {
-    if (asset !== "ERC20") return false;
-    if (!totals) return false;
-    if (!isAddress(token) || token === "0x0000000000000000000000000000000000000000") return true;
-    return tokenAllowance < totals.totalWei;
-  }, [asset, totals, token, tokenAllowance]);
-
-  const canSend =
-    !!address &&
-    onBase &&
-    parsed.ok &&
-    parsed.rows.length > 0 &&
-    isAddress(MULTISENDER) &&
-    (asset === "ETH" || (isAddress(token) && token !== "0x0000000000000000000000000000000000000000" && !needsApproval));
-  // Recipients editor (line-numbered; collapsible)
-  const [editorExpanded, setEditorExpanded] = useState(false);
-
-  // Default is 10 lines "folded". When content exceeds, the editor shows an internal scrollbar.
-  // If user expands, the editor grows with content and the full page scrolls.
-  const BASE_LINES = 10;
-  const LINE_HEIGHT_PX = 24; // Tailwind leading-6
-  const PAD_Y_PX = 16; // Tailwind p-4 / py-4
-
-  const rawLineCount = useMemo(() => (rawList.length ? rawList.split("\n").length : 2), [rawList]);
-  const lineCount = useMemo(() => Math.max(BASE_LINES, rawLineCount), [rawLineCount]);
-
-  const collapsedHeightPx = BASE_LINES * LINE_HEIGHT_PX + PAD_Y_PX * 2;
-  const contentHeightPx = lineCount * LINE_HEIGHT_PX + PAD_Y_PX * 2;
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, publicClient, address, mode, recipients, amounts, total, invalidLine]);
 
   function resetAll() {
     setRawList("");
     setTxHash(null);
-    setSummary(null);
-    setReceiptRows([]);
-    setStatus({ kind: "idle", message: "" });
+    setStatus(null);
   }
 
-  async function uploadCsv(file: File) {
+  async function onUploadCsv(file: File) {
     const text = await file.text();
-    const out = Papa.parse(text, { header: false, skipEmptyLines: true });
-    if (out.errors?.length) throw new Error(out.errors[0].message);
-    const lines = (out.data as any[])
-      .map((r) => `${String(r[0] ?? "").trim()},${String(r[1] ?? "").trim()}`)
-      .filter((l) => l !== ",")
-      .join("\n");
-    setRawList(lines);
+    // accept CSV: address,amount per line; ignore headers safely
+    const lines = safeParseLines(text)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    // if first line looks like header, drop it
+    const first = lines[0] || "";
+    const looksHeader = first.toLowerCase().includes("address") && first.toLowerCase().includes("amount");
+    const cleaned = (looksHeader ? lines.slice(1) : lines).join("\n");
+    setRawList(cleaned);
   }
 
-  async function ensureReady() {
-    if (!isAddress(MULTISENDER)) throw new Error("Set NEXT_PUBLIC_MULTISENDER_ADDRESS in .env.local");
-    if (!isAddress(PERMIT2)) throw new Error("Invalid Permit2 address (check env)");
-    if (!address) throw new Error("Connect your wallet");
-    if (!publicClient || !walletClient) throw new Error("Wallet not ready");
-    if (!onBase) throw new Error("Switch wallet to Base mainnet");
-    if (!parsed.ok) throw new Error(parsed.error);
-    if (parsed.rows.length === 0) throw new Error("Add at least 1 recipient");
-  }
+  async function approveExact() {
+    if (!address || !tokenAddress) return;
+    if (total <= 0n) return;
 
-  async function refreshTokenMeta(t: `0x${string}`) {
-    if (!publicClient || !address) return;
-    if (!isAddress(t) || t === "0x0000000000000000000000000000000000000000") return;
+    setPending(true);
+    setStatus("Preparing approval…");
+    setTxHash(null);
 
     try {
-      const [decimals, symbol] = await Promise.all([
-        publicClient.readContract({ address: t, abi: erc20Abi, functionName: "decimals" }),
-        publicClient.readContract({ address: t, abi: erc20Abi, functionName: "symbol" }),
-      ]);
-      setTokenDecimals(Number(decimals));
-      setTokenSymbol(String(symbol));
-    } catch {
-      setTokenDecimals(18);
-      setTokenSymbol("");
-    }
-
-    try {
-      const allowance = await publicClient.readContract({
-        address: t,
+      const hash = await writeContractAsync({
+        address: tokenAddress,
         abi: erc20Abi,
-        functionName: "allowance",
-        args: [address, PERMIT2],
+        functionName: "approve",
+        args: [PERMIT2_ADDRESS, total],
       });
-      setTokenAllowance(allowance);
-    } catch {
-      setTokenAllowance(0n);
+
+      setTxHash(hash);
+      setStatus("Approval submitted. Waiting for confirmation…");
+
+      await publicClient?.waitForTransactionReceipt({ hash });
+
+      // refresh reads
+      tokenAllowanceToPermit2.refetch?.();
+      permit2Allowance.refetch?.();
+
+      setStatus("Approved. You can send now.");
+    } catch (e: any) {
+      setStatus(e?.shortMessage || e?.message || "Approval failed.");
+    } finally {
+      setPending(false);
     }
   }
 
-  // Auto refresh token meta/allowance after token input settles
-  useEffect(() => {
-    if (asset !== "ERC20") return;
-    const h = setTimeout(() => {
-      refreshTokenMeta(token).catch(() => void 0);
-    }, 450);
-    return () => clearTimeout(h);
-  }, [asset, token, address]);
+  async function sendEth() {
+    if (!address) return;
+    if (recipients.length === 0) return;
+    if (invalidLine) return;
 
-  async function approveTokenExact() {
-    await ensureReady();
-    if (asset !== "ERC20") throw new Error("Switch to ERC20 mode");
-    if (!totals) throw new Error("Enter recipients first");
-    if (!isAddress(token) || token === "0x0000000000000000000000000000000000000000") throw new Error("Enter a valid token address");
+    setPending(true);
+    setStatus("Preparing transaction…");
+    setTxHash(null);
 
-    const approveAmount = totals.totalWei; // exact amount required for this batch
-    if (approveAmount === 0n) throw new Error("Total amount is 0");
-    if (tokenAllowance >= approveAmount) {
-      setStatus({ kind: "ok", message: "Already approved for this batch amount." });
+    try {
+      const hash = await writeContractAsync({
+        address: MULTISENDER_ADDRESS,
+        abi: multisenderAbi,
+        functionName: "sendETH",
+        args: [recipients, amounts],
+        value: total,
+      });
+
+      setTxHash(hash);
+      setStatus("Submitted. Waiting for confirmation…");
+
+      await publicClient?.waitForTransactionReceipt({ hash });
+
+      setStatus("Batch sent successfully.");
+    } catch (e: any) {
+      setStatus(e?.shortMessage || e?.message || "Transaction failed.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function sendToken() {
+    if (!address) return;
+    if (!tokenAddress) return;
+    if (decimals === undefined) return;
+    if (recipients.length === 0) return;
+    if (invalidLine) return;
+
+    if (needsApprove) {
+      setStatus("Approval is required before sending.");
       return;
     }
 
-    setStatus({ kind: "loading", message: "Approving exact amount..." });
-
-    async function doApprove(amount: bigint) {
-      const data = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [PERMIT2, amount],
-      });
-      const hash = await walletClient!.sendTransaction({ to: token, data, account: address! });
-      await publicClient!.waitForTransactionReceipt({ hash });
-    }
+    setPending(true);
+    setStatus("Preparing signature…");
+    setTxHash(null);
 
     try {
-      await doApprove(approveAmount);
-    } catch (e: any) {
-      // Some tokens require resetting allowance to 0 first
-      try {
-        setStatus({ kind: "loading", message: "Token requires reset. Setting allowance to 0..." });
-        await doApprove(0n);
-        setStatus({ kind: "loading", message: "Approving exact amount..." });
-        await doApprove(approveAmount);
-      } catch {
-        throw e;
-      }
-    }
+      // Build Permit2 PermitSingle
+      const now = Math.floor(Date.now() / 1000);
+      const expiration = now + 60 * 60 * 24 * 30; // 30 days
+      const sigDeadline = BigInt(now + 60 * 20); // 20 minutes
 
-    setStatus({ kind: "ok", message: "Approval confirmed. You can send now." });
-    await refreshTokenMeta(token);
-  }
+      const permitSingle = {
+        details: {
+          token: tokenAddress,
+          amount: total, // uint160 in contract; contract will validate bounds
+          expiration,
+          nonce: Number(permit2Nonce),
+        },
+        spender: MULTISENDER_ADDRESS,
+        sigDeadline,
+      };
 
-  const feeDisplay = useMemo(() => {
-    if (!fee?.total) return null;
-    return `${fmtEth(formatUnits(fee.total, 18))} ETH`;
-  }, [fee]);
+      const permitData = AllowanceTransfer.getPermitData(permitSingle as any, PERMIT2_ADDRESS, chainId ?? base.id);
 
-  // Better fee estimate for Base (OP Stack): try estimateTotalFee; fallback to (gas * gasPrice)
-  useEffect(() => {
-    const t = setTimeout(async () => {
-      try {
-        setFeeErr("");
-        setFee(null);
+      const signature = await signTypedDataAsync({
+        domain: permitData.domain,
+        types: permitData.types,
+        primaryType: permitData.primaryType,
+        message: permitData.values,
+      } as any);
 
-        if (!publicClient || !address) return;
-        if (!onBase) return;
-        if (asset !== "ETH") return;
-        if (!parsed.ok || parsed.rows.length === 0) return;
-        if (!isAddress(MULTISENDER)) return;
+      setStatus("Submitting transaction…");
 
-        const total = amountsETH.reduce((a, b) => a + b, 0n);
-        const fn = strict ? "sendETHStrict" : "sendETHBestEffort";
-        const data = encodeFunctionData({ abi: multisenderAbi, functionName: fn, args: [recipients, amountsETH] });
-
-        const req = { account: address, to: MULTISENDER, data, value: total } as const;
-
-        // L2 execution gas
-        const gas = await publicClient.estimateGas(req);
-        const gasPrice = await publicClient.getGasPrice();
-        let totalFee = gas * gasPrice;
-
-        // OP Stack total fee (L1 data + L2 + operator), if available on this client
-        try {
-          const anyClient = publicClient as any;
-          if (typeof anyClient.estimateTotalFee === "function") {
-            totalFee = await anyClient.estimateTotalFee(req);
-          }
-        } catch {
-          // ignore - fallback already set
-        }
-
-        setFee({ total: totalFee, gas, gasPrice });
-      } catch (e: any) {
-        setFeeErr(String(e?.shortMessage || e?.message || e));
-        setFee(null);
-      }
-    }, 350);
-
-    return () => clearTimeout(t);
-  }, [publicClient, address, onBase, asset, strict, recipients, amountsETH, parsed]);
-
-  async function decodeReceipt(logs: any[], decimals: number, unitLabel: string) {
-    const decoded = parseEventLogs({ abi: multisenderAbi, logs });
-    const rows: ReceiptRow[] = [];
-    let lastSummary: any = null;
-
-    for (const e of decoded) {
-      if (e.eventName === "BatchSummary") lastSummary = e.args;
-
-      if (e.eventName === "ETH_Item") {
-        const idx = Number(e.args.index as bigint);
-        const to = String(e.args.to);
-        const amt = e.args.amount as bigint;
-        const ok = Boolean(e.args.success);
-        const rd = e.args.returnDataTruncated as Hex;
-        rows.push({
-          index: idx,
-          to,
-          amount: `${fmtEth(formatUnits(amt, decimals))} ${unitLabel}`,
-          status: ok ? "success" : "failed",
-          reason: ok ? undefined : decodeRevertLike(rd),
-        });
-      }
-
-      if (e.eventName === "ERC20_Item") {
-        const idx = Number(e.args.index as bigint);
-        const to = String(e.args.to);
-        const amt = e.args.amount as bigint;
-        const ok = Boolean(e.args.success);
-        const rd = e.args.returnDataTruncated as Hex;
-        rows.push({
-          index: idx,
-          to,
-          amount: `${formatUnits(amt, decimals)} ${unitLabel}`,
-          status: ok ? "success" : "failed",
-          reason: ok ? undefined : decodeRevertLike(rd),
-        });
-      }
-    }
-
-    rows.sort((a, b) => a.index - b.index);
-    setReceiptRows(rows);
-
-    if (lastSummary) {
-      setSummary({
-        successCount: lastSummary.successCount as bigint,
-        failCount: lastSummary.failCount as bigint,
-        unsent: lastSummary.unsentOrRefundedAmount as bigint,
+      const hash = await writeContractAsync({
+        address: MULTISENDER_ADDRESS,
+        abi: multisenderAbi,
+        functionName: "sendERC20Permit2",
+        args: [permitSingle as any, signature as any, recipients, amounts],
       });
-    } else {
-      setSummary(null);
+
+      setTxHash(hash);
+      setStatus("Submitted. Waiting for confirmation…");
+
+      await publicClient?.waitForTransactionReceipt({ hash });
+
+      setStatus("Batch sent successfully.");
+      // refresh nonce/allowances
+      permit2Allowance.refetch?.();
+    } catch (e: any) {
+      setStatus(e?.shortMessage || e?.message || "Transaction failed.");
+    } finally {
+      setPending(false);
     }
   }
 
-  async function sendETH() {
-    await ensureReady();
+  // Derived UI strings
+  const totalLabel =
+    mode === "ETH"
+      ? `${Number(formatEther(total || 0n)).toLocaleString(undefined, { maximumFractionDigits: 8 })} ETH`
+      : decimals !== undefined
+        ? `${Number(formatUnits(total || 0n, decimals)).toLocaleString(undefined, { maximumFractionDigits: 8 })} ${symbol || "TOKEN"}`
+        : `—`;
 
-    setTxHash(null);
-    setSummary(null);
-    setReceiptRows([]);
+  const canSend =
+    isConnected &&
+    !pending &&
+    !invalidLine &&
+    recipients.length > 0 &&
+    (mode === "ETH" ? total > 0n : !!tokenAddress && decimals !== undefined && total > 0n && !needsApprove);
 
-    setStatus({ kind: "loading", message: "Preparing transaction..." });
+  const editorHeight = expanded ? `${lineCount * lineHeightPx}px` : `${visibleLines * lineHeightPx}px`;
 
-    const total = amountsETH.reduce((a, b) => a + b, 0n);
-    const fn = strict ? "sendETHStrict" : "sendETHBestEffort";
-    const data = encodeFunctionData({ abi: multisenderAbi, functionName: fn, args: [recipients, amountsETH] });
-
-    const hash = await walletClient!.sendTransaction({
-      to: MULTISENDER,
-      data,
-      value: total,
-      account: address!,
-    });
-
-    setTxHash(hash);
-    setStatus({ kind: "loading", message: "Confirming on-chain..." });
-
-    const rcpt = await publicClient!.waitForTransactionReceipt({ hash });
-    await decodeReceipt(rcpt.logs, 18, "ETH");
-
-    setStatus({ kind: "ok", message: "Batch sent successfully." });
-  }
-
-  async function sendERC20() {
-    await ensureReady();
-    if (!isAddress(token) || token === "0x0000000000000000000000000000000000000000") {
-      throw new Error("Enter a valid token address");
-    }
-    if (!parsed.ok) throw new Error(parsed.error);
-    if (!totals) throw new Error("Enter recipients first");
-
-    setTxHash(null);
-    setSummary(null);
-    setReceiptRows([]);
-
-    const total = totals.totalWei;
-    if (total > MAX_UINT160) throw new Error("Total exceeds uint160 limit. Split into smaller batches.");
-    if (tokenAllowance < total) throw new Error("Not approved yet. Click Approve first.");
-
-    setStatus({ kind: "loading", message: "Preparing signature..." });
-
-    const allowanceData = await publicClient!.readContract({
-      address: PERMIT2,
-      abi: permit2Abi,
-      functionName: "allowance",
-      args: [address!, token, MULTISENDER],
-    });
-
-    const nonce = allowanceData[2];
-
-    const permitSingle = {
-      details: {
-        token,
-        amount: total,
-        expiration: deadline(60 * 60 * 24 * 30),
-        nonce,
-      },
-      spender: MULTISENDER,
-      sigDeadline: BigInt(deadline(60 * 10)),
-    } as const;
-
-    const { domain, types, values } = AllowanceTransfer.getPermitData(permitSingle as any, PERMIT2, CHAIN_ID);
-
-    setStatus({ kind: "loading", message: "Requesting signature..." });
-    const signature = await walletClient!.signTypedData({
-      account: address!,
-      domain: domain as any,
-      types: types as any,
-      primaryType: "PermitSingle",
-      message: values as any,
-    });
-
-    setStatus({ kind: "loading", message: "Sending transaction..." });
-    const fn = strict ? "sendERC20Permit2Strict" : "sendERC20Permit2BestEffort";
-    const data = encodeFunctionData({
-      abi: multisenderAbi,
-      functionName: fn as any,
-      args: [permitSingle as any, signature, recipients, amountsToken],
-    });
-
-    const hash = await walletClient!.sendTransaction({ to: MULTISENDER, data, account: address! });
-
-    setTxHash(hash);
-    setStatus({ kind: "loading", message: "Confirming on-chain..." });
-
-    const rcpt = await publicClient!.waitForTransactionReceipt({ hash });
-    await decodeReceipt(rcpt.logs, tokenDecimals, tokenSymbol || "TOKEN");
-    await refreshTokenMeta(token);
-
-    setStatus({ kind: "ok", message: "Batch sent successfully." });
-  }
-
-  // skeleton to prevent initial flash / hydration mismatch
   if (!mounted) {
+    // Avoid hydration flicker / mismatches by rendering a stable placeholder on first paint.
     return (
-      <main className="min-h-screen text-zinc-100">
-        <div className="mx-auto max-w-6xl px-4 py-10">
-          <div className="h-9 w-64 rounded-xl bg-white/10" />
-          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className="lg:col-span-7 rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-              <div className="h-8 w-44 rounded-xl bg-white/10" />
-              <div className="mt-5 h-48 w-full rounded-2xl bg-white/5" />
-              <div className="mt-5 h-10 w-40 rounded-xl bg-white/10" />
-            </div>
-            <div className="lg:col-span-5 space-y-6">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-                <div className="h-6 w-28 rounded-xl bg-white/10" />
-                <div className="mt-4 h-28 w-full rounded-2xl bg-white/5" />
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-                <div className="h-6 w-28 rounded-xl bg-white/10" />
-                <div className="mt-4 h-24 w-full rounded-2xl bg-white/5" />
-              </div>
-            </div>
-          </div>
+      <main className="min-h-screen px-6 py-10">
+        <div className="mx-auto max-w-5xl">
+          <div className="h-10 w-64 rounded-xl bg-white/5" />
+          <div className="mt-6 h-80 rounded-3xl bg-white/5" />
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen text-zinc-100">
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-zinc-200" />
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Base MultiSender</h1>
-              <Badge className="ml-2" tone="neutral">
-                No protocol fee
-              </Badge>
+    <>
+      <main className="min-h-screen px-6 py-10">
+        <div className="mx-auto max-w-6xl">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="relative mt-1 h-8 w-8 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
+                <Image src="/logo.png" alt="Multi Sender" fill className="object-contain p-1" priority />
+              </div>
+
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-3xl font-semibold tracking-tight text-white">Base MultiSender</h1>
+                  <Badge className="bg-white/10 text-white/80 ring-1 ring-white/10">No protocol fee</Badge>
+                </div>
+                <p className="mt-1 text-sm text-white/60">Non-custodial. You pay only network gas.</p>
+              </div>
             </div>
-            <p className="text-sm text-zinc-400">No protocol fee. Pay only network gas.</p>
+
+            <div className="flex items-center gap-3">
+              <WalletConnectButton />
+            </div>
           </div>
-          <WalletConnect />
-        </header>
 
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Left */}
-          <div className="lg:col-span-7">
-            <Card>
-          <CardHeader>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setAsset("ETH")}
-                    className={cn(
-                      "inline-flex items-center rounded-xl border px-3 py-2 text-sm font-medium transition",
-                      asset === "ETH"
-                        ? "border-white/30 bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_24px_rgba(255,255,255,0.12)]"
-                        : "border-white/12 bg-white/5 text-zinc-200 hover:bg-white/10"
-                    )}
-                  >
-                    ETH
-                  </button>
-                  <button
-                    onClick={() => setAsset("ERC20")}
-                    className={cn(
-                      "inline-flex items-center rounded-xl border px-3 py-2 text-sm font-medium transition",
-                      asset === "ERC20"
-                        ? "border-white/30 bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_24px_rgba(255,255,255,0.12)]"
-                        : "border-white/12 bg-white/5 text-zinc-200 hover:bg-white/10"
-                    )}
-                  >
-                    ERC20
-                  </button>
-                </div>
+          <div className="my-8 h-px bg-white/10" />
 
-                <div className="ml-auto flex flex-col items-end gap-3">
-  <div className="flex flex-wrap items-center gap-2">
-    <span className="text-xs text-zinc-400">Mode</span>
-    <button
-      onClick={() => setStrict(true)}
-      className={cn(
-        "inline-flex items-center rounded-xl border px-3 py-2 text-sm font-medium transition",
-        strict
-          ? "border-white/30 bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_24px_rgba(255,255,255,0.12)]"
-          : "border-white/12 bg-white/5 text-zinc-200 hover:bg-white/10"
-      )}
-      title="All-or-nothing"
-    >
-      Strict
-    </button>
-    <button
-      onClick={() => setStrict(false)}
-      className={cn(
-        "inline-flex items-center rounded-xl border px-3 py-2 text-sm font-medium transition",
-        !strict
-          ? "border-white/30 bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_24px_rgba(255,255,255,0.12)]"
-          : "border-white/12 bg-white/5 text-zinc-200 hover:bg-white/10"
-      )}
-      title="Continue on failures and report results"
-    >
-      Best-effort
-    </button>
-  </div>
-
-  <div className="flex flex-wrap items-center justify-end gap-2">
-    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/12 bg-white/5 px-3 py-2 text-sm font-medium text-zinc-200 transition hover:bg-white/10">
-      <Upload className="h-4 w-4" />
-      Upload CSV
-      <input
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) uploadCsv(f).catch((err) => setStatus({ kind: "error", message: friendlyError(err) }));
-        }}
-      />
-    </label>
-
-    <button
-      onClick={resetAll}
-      className="inline-flex items-center gap-2 rounded-xl border border-white/12 bg-white/5 px-3 py-2 text-sm font-medium text-zinc-200 transition hover:bg-white/10"
-      title="Clear recipients and receipt"
-    >
-      <RotateCcw className="h-4 w-4" />
-      Reset
-    </button>
-  </div>
-</div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-5">
-              {!onBase && (
-                <div className="flex items-start gap-3 rounded-xl border border-amber-400/20 bg-amber-400/10 p-4">
-                  <Info className="h-5 w-5 text-amber-200 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-amber-100">Wrong network</div>
-                    <div className="text-xs text-amber-200/80 mt-1">Switch your wallet to Base mainnet.</div>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={switching}
-                    onClick={() => switchChain({ chainId: CHAIN_ID })}
-                  >
-                    {switching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Switch"}
-                  </Button>
-                </div>
-              )}
-
-              {asset === "ERC20" ? (
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-300">Token</label>
-                  <Input
-                    value={token}
-                    onChange={(e) => setToken(e.target.value as any)}
-                    placeholder="Token address (0x...)"
-                    spellCheck={false}
-                  />
-                  <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
-                    <span>
-                      Symbol: <span className="text-zinc-200">{tokenSymbol || "-"}</span>
-                    </span>
-                    <span>
-                      Decimals: <span className="text-zinc-200">{tokenDecimals}</span>
-                    </span>
-                    <span>
-                      Allowance:{" "}
-                      <span className="text-zinc-200">
-                        {tokenSymbol ? `${formatUnits(tokenAllowance, tokenDecimals)} ${tokenSymbol}` : tokenAllowance.toString()}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="text-xs text-zinc-500">
-                    Approve is a one-time permission for this batch amount. You still sign the transaction.
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm text-zinc-300">Recipients</label></div>
-
-                {/* Numbered editor */}
-                <div className="rounded-xl border border-white/10 bg-black/30 focus-within:ring-2 focus-within:ring-white/10">
-                  <div
-                    className={cn(
-                      "flex w-full",
-                      "scrollbar-dark ", "bg-black/30 ", editorExpanded ? "overflow-visible" : "overflow-y-auto"
-                    )}
-                    style={!editorExpanded ? { height: collapsedHeightPx } : undefined}
-                  >
-                    <pre
-                      className="flex-none select-none border-r border-white/10 bg-white/[0.04] px-3 py-4 text-right font-mono text-sm tabular-nums leading-6 text-zinc-500"
-                      style={{ width: 46 }}
-                      aria-hidden="true"
-                    >
-                      {Array.from({ length: lineCount }, (_, i) => i + 1).join("\n")}
-                    </pre>
-
-                    <textarea
-                      value={rawList}
-                      onChange={(e) => setRawList(e.target.value)}
-                      placeholder={`0x1111111111111111111111111111111111111111,0.01\n0x2222222222222222222222222222222222222222,0.02`}
-                      wrap="off"
-                      spellCheck={false}
-                      className={cn(
-                        "w-full bg-transparent p-4 font-mono text-sm leading-6 text-zinc-100 outline-none",
-                        "resize-none whitespace-pre [overflow-wrap:normal]",
-                        "overflow-x-auto overflow-y-hidden"
-                      )}
-                      style={{ height: contentHeightPx, resize: "none" }}
-                    />
-                  </div>
-                </div>
-
-<div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="text-zinc-400">
-                    {parsed.ok ? (
-                      <span>
-                        Parsed: <span className="text-zinc-200">{parsed.rows.length}</span> recipients
-                        {parsed.warnings.length ? <span className="ml-2 text-amber-200">({parsed.warnings[0]})</span> : null}
-                      </span>
-                    ) : (
-                      <span className="text-red-200">{parsed.error}</span>
-                    )}
-                  </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Left: composer */}
+            <Card className="lg:col-span-7 bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
+              <CardHeader className="pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-  <span className="text-zinc-500">Format: address,amount (one per line)</span>
-  <button
-    type="button"
-    onClick={() => setEditorExpanded((v) => !v)}
-    className={cn(
-      "inline-flex items-center rounded-xl border px-3 py-1.5 text-xs font-medium transition",
-      editorExpanded
-        ? "border-white/30 bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_24px_rgba(255,255,255,0.12)]"
-        : "border-white/12 bg-white/5 text-zinc-200 hover:bg-white/10"
-    )}
-    title="Increase editor height (page will expand)"
-  >
-    {editorExpanded ? "Collapse" : "Expand"}
-  </button>
-</div>
-                </div>
-              </div>
+                    <div className="inline-flex items-center gap-1 rounded-2xl bg-white/5 ring-1 ring-white/10 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setMode("ETH")}
+                        className={[
+                          "px-3 py-1.5 text-sm font-medium rounded-xl transition",
+                          mode === "ETH"
+                            ? "bg-white text-black shadow"
+                            : "text-white/80 hover:bg-white/10",
+                        ].join(" ")}
+                      >
+                        ETH
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMode("ERC20")}
+                        className={[
+                          "px-3 py-1.5 text-sm font-medium rounded-xl transition",
+                          mode === "ERC20"
+                            ? "bg-white text-black shadow"
+                            : "text-white/80 hover:bg-white/10",
+                        ].join(" ")}
+                      >
+                        ERC20
+                      </button>
+                    </div>
 
-              {/* Primary actions (separate layer) */}
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  {asset === "ERC20" ? (
+                    <Badge className="bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-500/20">Strict</Badge>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center">
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) onUploadCsv(f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="gap-2 bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload CSV
+                      </Button>
+                    </label>
+
                     <Button
-                      variant="secondary"
-                      disabled={!address || !onBase || !parsed.ok || parsed.rows.length === 0 || !isAddress(token) || token === "0x0000000000000000000000000000000000000000" || status.kind === "loading" || !needsApproval}
-                      onClick={() => {
-                        setStatus({ kind: "idle", message: "" });
-                        approveTokenExact().catch((e) => setStatus({ kind: "error", message: friendlyError(e) }));
-                      }}
-                      title="Approve exact total amount for this batch"
+                      type="button"
+                      variant="outline"
+                      onClick={resetAll}
+                      className="bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
                     >
-                      {status.kind === "loading" && needsApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Approve
+                      Reset
                     </Button>
-                  ) : null}
-
-                  <Button
-                    variant="primary"
-                    disabled={!canSend || status.kind === "loading"}
-                    onClick={() => {
-                      setStatus({ kind: "idle", message: "" });
-                      (asset === "ETH" ? sendETH() : sendERC20()).catch((e) =>
-                        setStatus({ kind: "error", message: friendlyError(e) })
-                      );
-                    }}
-                  >
-                    {status.kind === "loading" && canSend ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {asset === "ETH" ? "Send ETH" : "Send Token"}
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-
-                  {txHash ? (
-                    <Button variant="secondary" onClick={() => window.open(EXPLORER_TX + txHash, "_blank")}>
-                      Explorer <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-
-              {status.kind !== "idle" && status.message ? (
-                <div
-                  className={
-                    "rounded-xl border p-4 text-sm " +
-                    (status.kind === "error"
-                      ? "border-red-400/20 bg-red-400/10 text-red-100"
-                      : status.kind === "ok"
-                      ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
-                      : "border-white/10 bg-black/20 text-zinc-200")
-                  }
-                >
-                  {status.message}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-          </div>
-
-          {/* Right */}
-          <div className="lg:col-span-5 space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Review</div>
-                  <Badge tone={strict ? "good" : "warn"}>{strict ? "Strict" : "Best-effort"}</Badge>
+                  </div>
                 </div>
               </CardHeader>
 
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-400">Network</span>
-                  <span className="text-zinc-200">{onBase ? "Base mainnet" : "Not Base"}</span>
-                </div>
+              <CardContent className="space-y-4">
+                {mode === "ERC20" && (
+                  <div className="space-y-2">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-end">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-white/70">Token</label>
+                          <div className="text-xs text-white/45">
+                            {tokenAddress && decimals !== undefined ? (
+                              <>
+                                {symbol ? `${symbol} · ` : ""}
+                                Decimals: {decimals}
+                              </>
+                            ) : (
+                              "Paste token contract address"
+                            )}
+                          </div>
+                        </div>
+                        <Input
+                          value={tokenInput}
+                          onChange={(e) => setTokenInput(e.target.value)}
+                          placeholder="0x…"
+                          className="mt-1 bg-black/30 border-white/10 text-white placeholder:text-white/30 rounded-2xl"
+                        />
+                      </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-400">Sender</span>
-                  <span className="font-mono text-xs">{address ? shortAddr(address) : "-"}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-400">Contract</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs">{isAddress(MULTISENDER) ? shortAddr(MULTISENDER) : "-"}</span>
-                    {isAddress(MULTISENDER) ? (
-                      <button
-                        className="rounded-lg border border-white/10 bg-white/10 p-1 hover:bg-white/15"
-                        onClick={() => navigator.clipboard.writeText(MULTISENDER)}
-                        title="Copy address"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="h-px bg-white/10 my-3" />
-
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-400">Recipients</span>
-                  <span className="text-zinc-200">{parsed.ok ? parsed.rows.length : 0}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-400">Total</span>
-                  <span className="text-zinc-200">{totals ? totals.display : "-"}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-400">Estimated fee</span>
-                  <span className="text-zinc-200">{asset === "ETH" ? feeDisplay ?? "—" : "—"}</span>
-                </div>
-
-                {feeErr && asset === "ETH" ? (
-                  <div className="text-xs text-amber-200/80">Fee estimate unavailable: {feeErr}</div>
-                ) : null}
-
-                {asset === "ERC20" && needsApproval ? (
-                  <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100">
-                    <Info className="h-4 w-4 mt-0.5" />
-                    <div>
-                      Approval required for this batch total. Click <b>Approve</b>, then <b>Send Token</b>.
+                      <div className="flex gap-2">
+                        <Button
+                              type="button"
+                              variant={needsApprove ? "default" : "outline"}
+                              onClick={approveExact}
+                              disabled={!isConnected || pending || !tokenAddress || total <= 0n || !needsApprove}
+                              className={
+                                needsApprove
+                                  ? "rounded-2xl bg-white text-black hover:bg-white/90"
+                                  : "rounded-2xl bg-white/0 border-white/15 text-white/70"
+                              }
+                            >
+                              {pending && status?.toLowerCase().includes("approval") ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" /> Approving…
+                                </span>
+                              ) : (
+                                "Approve"
+                              )}
+                            </Button>
+                        <div className="mt-1 text-[11px] text-white/45">Approve grants Permit2 permission to pull exactly the batch total (not unlimited).</div>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
 
-                <div className="mt-3 flex items-start gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-zinc-300">
-                  <Info className="h-4 w-4 mt-0.5 text-zinc-400" />
-                  <div>
-                    {strict ? (
-                      <span>Strict mode is atomic (all-or-nothing). If any transfer fails, the transaction reverts.</span>
-                    ) : (
-                      <span>Best-effort continues on failures and reports which recipients failed.</span>
+                    {tokenAddress && total > 0n && (
+                      <div className="text-xs text-white/45">
+                        Permit2 allowance (token → Permit2):{" "}
+                        <span className="text-white/70">
+                          {decimals !== undefined ? formatUnits(allowanceToPermit2, decimals) : allowanceToPermit2.toString()}
+                        </span>
+                      </div>
                     )}
                   </div>
+                )}
+
+                {/* Recipients editor */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-white/70">Recipients</label>
+                    <div className="flex items-center gap-2 text-xs text-white/45">
+                      Format: address,amount (one per line)
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setExpanded((v) => !v)}
+                        className="h-7 rounded-xl bg-white/0 border-white/15 text-white/70 hover:bg-white/10"
+                      >
+                        {expanded ? "Collapse" : "Expand"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-black/30">
+                    <div className="flex">
+                      <div
+                        ref={numsRef}
+                        aria-hidden
+                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs leading-6 text-white/35"
+                        style={{ height: editorHeight }}
+                      >
+                        {Array.from({ length: lineCount }, (_, i) => (
+                          <div key={i} style={{ height: `${lineHeightPx}px` }} className="leading-6">
+                            {i + 1}
+                          </div>
+                        ))}
+                      </div>
+
+                      <textarea
+                        ref={textareaRef}
+                        value={rawList}
+                        onChange={(e) => {
+                          setRawList(e.target.value);
+                          setTxHash(null);
+                          setStatus(null);
+                        }}
+                        placeholder={`0x1111...1111, 0.01\n0x2222...2222, 0.02`}
+                        spellCheck={false}
+                        className={[
+                          "w-full resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20",
+                          expanded ? "overflow-y-hidden" : "overflow-y-auto",
+                        ].join(" ")}
+                        style={{
+                          height: editorHeight,
+                          lineHeight: `${lineHeightPx}px`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="text-white/50">
+                      Parsed: <span className="text-white/70">{recipients.length}</span> recipients
+                      {invalidLine ? (
+                        <span className="ml-2 text-rose-300">
+                          Invalid line: <span className="text-rose-200/90">"{invalidLine}"</span>
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="text-white/45">
+                      Total: <span className="text-white/70">{totalLabel}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Primary action */}
+                <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-4">
+                  {mode === "ETH" ? (
+                    <Button
+                      type="button"
+                      onClick={sendEth}
+                      disabled={!canSend}
+                      className="w-full rounded-2xl bg-white text-black hover:bg-white/90"
+                    >
+                      {pending ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Sending…
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          Send ETH <ExternalLink className="h-4 w-4 opacity-70" />
+                        </span>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={sendToken}
+                      disabled={!canSend}
+                      className="w-full rounded-2xl bg-white text-black hover:bg-white/90"
+                    >
+                      {pending ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Sending…
+                        </span>
+                      ) : needsApprove ? (
+                        "Approve first"
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          Send Token <ExternalLink className="h-4 w-4 opacity-70" />
+                        </span>
+                      )}
+                    </Button>
+                  )}
+
+                  {status ? (
+                    <div className="mt-3 rounded-xl bg-black/30 ring-1 ring-white/10 px-3 py-2 text-sm text-white/70">
+                      {status}
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
 
-            {txHash ? (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">Receipt</div>
-                    <Badge tone="neutral" className="font-mono">
-                      {shortAddr(txHash)}
-                    </Badge>
-                  </div>
+            {/* Right: review */}
+            <div className="lg:col-span-5 space-y-6">
+              <Card className="bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-white">Review</CardTitle>
+                  <CardDescription className="text-white/50">
+                    Strict mode is atomic (all-or-nothing). If any transfer fails, the transaction reverts.
+                  </CardDescription>
                 </CardHeader>
-
                 <CardContent className="space-y-4">
-                  {summary ? (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs text-zinc-400">Success</div>
-                        <div className="mt-1 text-lg font-semibold text-zinc-100">{String(summary.successCount ?? 0n)}</div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs text-zinc-400">Failed</div>
-                        <div className="mt-1 text-lg font-semibold text-zinc-100">{String(summary.failCount ?? 0n)}</div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs text-zinc-400">Unsent / Refunded</div>
-                        <div className="mt-1 text-lg font-semibold text-zinc-100">
-                          {summary.unsent ? fmtEth(formatUnits(summary.unsent, asset === "ETH" ? 18 : tokenDecimals)) : "0"}
-                        </div>
-                      </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="text-white/50">Network</div>
+                    <div className="text-right text-white/80">Base mainnet</div>
+
+                    <div className="text-white/50">Sender</div>
+                    <div className="text-right text-white/80">{address ? shortAddr(address) : "—"}</div>
+
+                    <div className="text-white/50">Contract</div>
+                    <div className="flex items-center justify-end gap-2">
+                      <a
+                        href={EXPLORER_ADDR(MULTISENDER_ADDRESS)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-white/80 hover:text-white underline-offset-4 hover:underline"
+                      >
+                        {shortAddr(MULTISENDER_ADDRESS)}
+                      </a>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 w-8 rounded-xl bg-white/0 border-white/15 text-white/70 hover:bg-white/10"
+                        onClick={() => copyToClipboard(MULTISENDER_ADDRESS)}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
                     </div>
-                  ) : null}
 
-                  <ReceiptTable rows={receiptRows} />
+                    {mode === "ERC20" && (
+                      <>
+                        <div className="text-white/50">Token</div>
+                        <div className="text-right text-white/80">{tokenAddress ? shortAddr(tokenAddress) : "—"}</div>
+                      </>
+                    )}
 
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        variant="secondary"
-                        className="min-w-[140px]"
-                        onClick={() => window.open(EXPLORER_TX + txHash, "_blank")}
-                      >
-                        Explorer <ExternalLink className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="min-w-[160px]"
-                        onClick={() => navigator.clipboard.writeText(txHash)}
-                      >
-                        Copy Tx Hash <Copy className="h-4 w-4" />
-                      </Button>
+                    <div className="text-white/50">Recipients</div>
+                    <div className="text-right text-white/80">{recipients.length}</div>
+
+                    <div className="text-white/50">Total</div>
+                    <div className="text-right text-white/80">{totalLabel}</div>
+
+                    <div className="text-white/50">Estimated fee</div>
+                    <div className="text-right text-white/80">
+                      {feeLoading ? <Loader2 className="ml-auto h-4 w-4 animate-spin" /> : formatFeeEth(feeWei)}
                     </div>
                   </div>
+
+                  {mode === "ERC20" ? (
+                    <div className="rounded-2xl bg-black/25 ring-1 ring-white/10 p-3 text-xs text-white/55">
+                      Token transfers will be sent from the contract to recipients. There is also a single on-chain
+                      transfer into the contract (your wallet → contract) to fund the batch.
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl bg-black/25 ring-1 ring-white/10 p-3 text-xs text-white/55">
+                      ETH is forwarded by the contract in one atomic batch.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            ) : null}
+
+              {/* Receipt */}
+              {txHash ? (
+                <Card className="bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <CardTitle className="text-white">Receipt</CardTitle>
+                      <Badge className="bg-white/10 text-white/70 ring-1 ring-white/10">{shortAddr(txHash)}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3">
+                        <div className="text-xs text-white/50">Recipients</div>
+                        <div className="mt-1 text-lg font-semibold text-white">{recipients.length}</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3">
+                        <div className="text-xs text-white/50">Mode</div>
+                        <div className="mt-1 text-lg font-semibold text-white">{mode}</div>
+                      </div>
+                      <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3">
+                        <div className="text-xs text-white/50">Total</div>
+                        <div className="mt-1 text-lg font-semibold text-white">{totalLabel}</div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div className="text-sm text-white/70">Tx hash</div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                          onClick={() => window.open(EXPLORER_TX(txHash), "_blank")}
+                        >
+                          Explorer <ExternalLink className="ml-2 h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                          onClick={() => copyToClipboard(txHash)}
+                        >
+                          Copy <Copy className="ml-2 h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+            </div>
           </div>
+
+          <footer className="mt-10 text-xs text-white/40">
+            Built for Base. Non-custodial.
+          </footer>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
