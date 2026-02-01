@@ -693,7 +693,9 @@ export default function Home() {
                       <div className="flex gap-2">
                         <Button
                               type="button"
-                              variant={needsApprove ? "default" : "outline"}
+                              // Our Button component variants are: primary | secondary | ghost | outline | danger
+                              // Use primary for the "Approve" call-to-action.
+                              variant={needsApprove ? "primary" : "outline"}
                               onClick={approveExact}
                               disabled={!isConnected || pending || !tokenAddress || total <= 0n || !needsApprove}
                               className={
