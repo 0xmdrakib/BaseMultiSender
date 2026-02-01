@@ -16,6 +16,8 @@ import {
 } from "viem";
 import { publicActionsL2 } from "viem/op-stack";
 import { AllowanceTransfer } from "@uniswap/permit2-sdk";
+import Papa from "papaparse";
+
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,12 +26,19 @@ import { Input } from "@/components/ui/input";
 import { Copy, ExternalLink, Loader2, Upload } from "lucide-react";
 import WalletConnectButton from "@/components/WalletConnect";
 
-// ---------- Config (env first, with safe fallbacks) ----------
-const MULTISENDER_ADDRESS = (process.env.NEXT_PUBLIC_MULTISENDER_ADDRESS ||
-  "0xAd7d4483Eb4352B71aCc8C3C81482079b0636d55") as Address;
+// ---------- Config (env first, validated, with safe fallbacks) ----------
+const DEFAULT_MULTISENDER_ADDRESS = "0xAd7d4483Eb4352B71aCc8C3C81482079b0636d55" as const;
+const DEFAULT_PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
 
-const PERMIT2_ADDRESS = (process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ||
-  "0x000000000022D473030F116dDEE9F6B43aC78BA3") as Address;
+// Next.js embeds NEXT_PUBLIC_* env vars into the client bundle at build time.
+// Validate them so a typo can’t silently point users at the wrong contract.
+const MULTISENDER_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_MULTISENDER_ADDRESS ?? "")
+  ? (getAddress(process.env.NEXT_PUBLIC_MULTISENDER_ADDRESS as string) as Address)
+  : (DEFAULT_MULTISENDER_ADDRESS as Address));
+
+const PERMIT2_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ?? "")
+  ? (getAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS as string) as Address)
+  : (DEFAULT_PERMIT2_ADDRESS as Address));
 
 // BaseScan (mainnet)
 const EXPLORER_TX = (hash: string) => `https://basescan.org/tx/${hash}`;
@@ -230,6 +239,8 @@ async function copyToClipboard(text: string) {
 
 export default function Home() {
   const { address, chainId, isConnected } = useAccount();
+  const isBaseChain = chainId === base.id;
+
   const publicClient = usePublicClient({ chainId: base.id });
 
   const { writeContractAsync } = useWriteContract();
@@ -337,6 +348,7 @@ export default function Home() {
       if (!mounted) return;
       if (!publicClient) return;
       if (!address) return;
+      if (!isBaseChain) return;
       if (mode !== "ETH") return;
       if (recipients.length === 0) return;
       if (invalidLine) return;
@@ -383,7 +395,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [mounted, publicClient, address, mode, recipients, amounts, total, invalidLine]);
+  }, [mounted, publicClient, address, isBaseChain, mode, recipients, amounts, total, invalidLine]);
 
   function resetAll() {
     setRawList("");
@@ -393,26 +405,70 @@ export default function Home() {
 
   async function onUploadCsv(file: File) {
     const text = await file.text();
-    // accept CSV: address,amount per line; ignore headers safely
-    const lines = safeParseLines(text)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    // if first line looks like header, drop it
-    const first = lines[0] || "";
-    const looksHeader = first.toLowerCase().includes("address") && first.toLowerCase().includes("amount");
-    const cleaned = (looksHeader ? lines.slice(1) : lines).join("\n");
+
+    const parsedCsv = Papa.parse<string[]>(text, {
+      skipEmptyLines: true,
+    });
+
+    if (parsedCsv.errors?.length) {
+      setStatus(`CSV parse error: ${parsedCsv.errors[0]?.message ?? "Unknown error"}`);
+      return;
+    }
+
+    const rows = (parsedCsv.data || [])
+      .map((row) => (Array.isArray(row) ? row : [String(row)]))
+      .map((row) => row.map((c) => String(c ?? "").trim()));
+
+    const firstRow = rows[0] ?? [];
+    const headerProbe = firstRow.join(",").toLowerCase();
+    const looksHeader = headerProbe.includes("address") && headerProbe.includes("amount");
+
+    const bodyRows = looksHeader ? rows.slice(1) : rows;
+
+    const cleaned = bodyRows
+      .map((r) => {
+        const c0 = (r[0] ?? "").trim();
+        const c1 = (r[1] ?? "").trim();
+
+        if (!c0) return "";
+
+        // Some exports put "address amount" in one column.
+        if (!c1 && /\s+/.test(c0)) {
+          const parts = c0.split(/\s+/);
+          return `${(parts[0] ?? "").trim()}, ${(parts[1] ?? "").trim()}`.trim();
+        }
+
+        return `${c0}, ${c1}`.trim();
+      })
+      .filter(Boolean)
+      .join("\n");
+
     setRawList(cleaned);
+    setTxHash(null);
+    setStatus(null);
   }
+
 
   async function approveExact() {
     if (!address || !tokenAddress) return;
+    if (!isBaseChain) {
+      setStatus("Please switch to Base mainnet.");
+      return;
+    }
     if (total <= 0n) return;
 
     setPending(true);
     setStatus("Preparing approval…");
     setTxHash(null);
 
+    const wait = async (hash: `0x${string}`, label: string) => {
+      setTxHash(hash);
+      setStatus(label);
+      await publicClient?.waitForTransactionReceipt({ hash });
+    };
+
     try {
+      // Most tokens support updating allowance directly.
       const hash = await writeContractAsync({
         address: tokenAddress,
         abi: erc20Abi,
@@ -420,10 +476,7 @@ export default function Home() {
         args: [PERMIT2_ADDRESS, total],
       });
 
-      setTxHash(hash);
-      setStatus("Approval submitted. Waiting for confirmation…");
-
-      await publicClient?.waitForTransactionReceipt({ hash });
+      await wait(hash, "Approval submitted. Waiting for confirmation…");
 
       // refresh reads
       tokenAllowanceToPermit2.refetch?.();
@@ -431,14 +484,53 @@ export default function Home() {
 
       setStatus("Approved. You can send now.");
     } catch (e: any) {
-      setStatus(e?.shortMessage || e?.message || "Approval failed.");
+      // Some tokens (USDT-style) require setting allowance to 0 before updating it.
+      const msg = e?.shortMessage || e?.message || "Approval failed.";
+
+      if (allowanceToPermit2 > 0n && total !== allowanceToPermit2) {
+        try {
+          setStatus("Approval failed (token requires reset). Resetting to 0…");
+
+          const resetHash = await writeContractAsync({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [PERMIT2_ADDRESS, 0n],
+          });
+
+          await wait(resetHash, "Reset submitted. Waiting for confirmation…");
+
+          const hash2 = await writeContractAsync({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [PERMIT2_ADDRESS, total],
+          });
+
+          await wait(hash2, "Approval submitted. Waiting for confirmation…");
+
+          tokenAllowanceToPermit2.refetch?.();
+          permit2Allowance.refetch?.();
+
+          setStatus("Approved. You can send now.");
+        } catch (e2: any) {
+          setStatus(e2?.shortMessage || e2?.message || msg);
+        }
+      } else {
+        setStatus(msg);
+      }
     } finally {
       setPending(false);
     }
   }
 
+
   async function sendEth() {
     if (!address) return;
+    if (!isBaseChain) {
+      setStatus("Please switch to Base mainnet.");
+      return;
+    }
     if (recipients.length === 0) return;
     if (invalidLine) return;
 
@@ -470,6 +562,10 @@ export default function Home() {
 
   async function sendToken() {
     if (!address) return;
+    if (!isBaseChain) {
+      setStatus("Please switch to Base mainnet.");
+      return;
+    }
     if (!tokenAddress) return;
     if (decimals === undefined) return;
     if (recipients.length === 0) return;
@@ -548,6 +644,7 @@ export default function Home() {
 
   const canSend =
     isConnected &&
+    isBaseChain &&
     !pending &&
     !invalidLine &&
     recipients.length > 0 &&
@@ -697,7 +794,7 @@ export default function Home() {
                               // Use primary for the "Approve" call-to-action.
                               variant={needsApprove ? "primary" : "outline"}
                               onClick={approveExact}
-                              disabled={!isConnected || pending || !tokenAddress || total <= 0n || !needsApprove}
+                              disabled={!isConnected || !isBaseChain || pending || !tokenAddress || total <= 0n || !needsApprove}
                               className={
                                 needsApprove
                                   ? "rounded-2xl bg-white text-black hover:bg-white/90"
