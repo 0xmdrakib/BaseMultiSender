@@ -4,7 +4,8 @@ import { cn } from "./cn";
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   // Keep this in sync with usage across the app.
   // "outline" is used for bordered actions (Upload / Reset / Explorer etc.).
-  variant?: "primary" | "secondary" | "ghost" | "outline" | "danger";
+  // "default" is a common shadcn/ui variant name; we alias it to our "primary".
+  variant?: "primary" | "secondary" | "ghost" | "outline" | "danger" | "default";
   size?: "sm" | "md";
 };
 
@@ -20,6 +21,7 @@ export function Button({
     "focus:outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-50 disabled:cursor-not-allowed";
 
   const variants: Record<string, string> = {
+    default: "bg-white text-black hover:bg-zinc-200",
     primary: "bg-white text-black hover:bg-zinc-200",
     secondary: "bg-white/10 text-zinc-100 hover:bg-white/15 border border-white/10",
     ghost: "bg-transparent hover:bg-white/10 border border-transparent",
