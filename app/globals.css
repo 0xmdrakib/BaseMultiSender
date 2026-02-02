@@ -38,3 +38,12 @@ body {
 .scrollbar-dark::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 9999px; border: 2px solid rgba(0,0,0,0.35); }
 .scrollbar-dark::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
 .scrollbar-dark::-webkit-scrollbar-corner { background: transparent; }
+
+/* Hide scrollbars while keeping content scrollable */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
