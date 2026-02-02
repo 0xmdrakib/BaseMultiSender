@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useSignTypedData, useWriteContract } from "wagmi";
 import { base } from "wagmi/chains";
@@ -273,6 +272,7 @@ export default function Home() {
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const numsRef = useRef<HTMLDivElement | null>(null);
+  const numsInnerRef = useRef<HTMLDivElement | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const [copied, setCopied] = useState<null | "contract" | "tx">(null);
@@ -300,27 +300,24 @@ export default function Home() {
     return Math.max(visibleLines, lines.length || visibleLines);
   }, [rawList]);
 
-  // scroll-sync line numbers with textarea
+  // Keep line numbers perfectly in sync with the textarea scroll.
+  // Important: the number rail itself should NOT be independently scrollable
+  // (otherwise users have to scroll twice). Instead, we translate the numbers
+  // by the textarea's scrollTop.
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    const onScroll = () => {
-      if (numsRef.current) numsRef.current.scrollTop = ta.scrollTop;
-    };
-    ta.addEventListener("scroll", onScroll, { passive: true });
-    return () => ta.removeEventListener("scroll", onScroll);
-  }, []);
 
-  // If the user scrolls the line-number rail, keep the textarea in sync too.
-  useEffect(() => {
-    const nums = numsRef.current;
-    const ta = textareaRef.current;
-    if (!nums || !ta) return;
-    const onScroll = () => {
-      ta.scrollTop = nums.scrollTop;
+    const sync = () => {
+      const st = ta.scrollTop;
+      if (numsInnerRef.current) {
+        numsInnerRef.current.style.transform = `translateY(-${st}px)`;
+      }
     };
-    nums.addEventListener("scroll", onScroll, { passive: true });
-    return () => nums.removeEventListener("scroll", onScroll);
+
+    sync();
+    ta.addEventListener("scroll", sync, { passive: true });
+    return () => ta.removeEventListener("scroll", sync);
   }, []);
 
   const tokenDecimalsRead = useReadContract({
@@ -709,7 +706,7 @@ export default function Home() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/12 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
-                <Image src="/logo-mark.png" alt="Multi Sender" fill className="object-contain" priority />
+                <img src="/logo-mark.png" alt="Multi Sender" className="h-full w-full object-contain" />
               </div>
 
               <div>
@@ -866,22 +863,27 @@ export default function Home() {
                       <div
                         ref={numsRef}
                         aria-hidden
-                        className="select-none overflow-y-scroll scrollbar-none border-r border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs leading-6 text-white/35"
+                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs leading-6 text-white/35"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
+
+                          // Scroll the textarea (single source of truth).
                           const prev = ta.scrollTop;
                           ta.scrollTop += e.deltaY;
-                          // prevent the page from stealing the wheel while the editor can scroll
+
+                          // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
                         style={{ height: editorHeight }}
                       >
-                        {Array.from({ length: lineCount }, (_, i) => (
-                          <div key={i} style={{ height: `${lineHeightPx}px` }} className="leading-6">
-                            {i + 1}
-                          </div>
-                        ))}
+                        <div ref={numsInnerRef}>
+                          {Array.from({ length: lineCount }, (_, i) => (
+                            <div key={i} style={{ height: `${lineHeightPx}px` }} className="leading-6">
+                              {i + 1}
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       <textarea
@@ -894,8 +896,11 @@ export default function Home() {
                         }}
                         placeholder={`0x1111...1111, 0.01\n0x2222...2222, 0.02`}
                         spellCheck={false}
+                        wrap="off"
                         className={[
-                          "w-full resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark",
+                          // Disable line-wrapping so each logical line remains one visual line.
+                          // This keeps line numbers perfectly aligned with each address line.
+                          "w-full resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
                           expanded ? "overflow-y-hidden" : "overflow-y-auto",
                         ].join(" ")}
                         style={{
