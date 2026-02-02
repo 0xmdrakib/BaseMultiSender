@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Copy, ExternalLink, Loader2, Upload } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Upload } from "lucide-react";
 import WalletConnectButton from "@/components/WalletConnect";
 
 // ---------- Config (env first, validated, with safe fallbacks) ----------
@@ -232,8 +232,25 @@ function parseRecipients({
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
+    return true;
   } catch {
-    // ignore
+    // Fallback for browsers / contexts where Clipboard API isn't available.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.top = "0";
+      ta.style.left = "0";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -256,6 +273,9 @@ export default function Home() {
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const numsRef = useRef<HTMLDivElement | null>(null);
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [copied, setCopied] = useState<null | "contract" | "tx">(null);
 
   // Token
   const [tokenInput, setTokenInput] = useState("");
@@ -289,6 +309,18 @@ export default function Home() {
     };
     ta.addEventListener("scroll", onScroll, { passive: true });
     return () => ta.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // If the user scrolls the line-number rail, keep the textarea in sync too.
+  useEffect(() => {
+    const nums = numsRef.current;
+    const ta = textareaRef.current;
+    if (!nums || !ta) return;
+    const onScroll = () => {
+      ta.scrollTop = nums.scrollTop;
+    };
+    nums.addEventListener("scroll", onScroll, { passive: true });
+    return () => nums.removeEventListener("scroll", onScroll);
   }, []);
 
   const tokenDecimalsRead = useReadContract({
@@ -401,6 +433,11 @@ export default function Home() {
     setRawList("");
     setTxHash(null);
     setStatus(null);
+  }
+
+  function flashCopied(which: "contract" | "tx") {
+    setCopied(which);
+    window.setTimeout(() => setCopied(null), 1200);
   }
 
   async function onUploadCsv(file: File) {
@@ -671,8 +708,8 @@ export default function Home() {
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
-              <div className="relative mt-1 h-8 w-8 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
-                <Image src="/logo.png" alt="Multi Sender" fill className="object-contain p-1" priority />
+              <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/12 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
+                <Image src="/logo-mark.png" alt="Multi Sender" fill className="object-contain" priority />
               </div>
 
               <div>
@@ -728,26 +765,26 @@ export default function Home() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center">
-                      <input
-                        type="file"
-                        accept=".csv,text/csv"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) onUploadCsv(f);
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="gap-2 bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Upload CSV
-                      </Button>
-                    </label>
+                    <input
+                      ref={csvInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) onUploadCsv(f);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => csvInputRef.current?.click()}
+                      className="gap-2 bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Upload CSV
+                    </Button>
 
                     <Button
                       type="button"
@@ -763,62 +800,45 @@ export default function Home() {
 
               <CardContent className="space-y-4">
                 {mode === "ERC20" && (
-                  <div className="space-y-2">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-end">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm text-white/70">Token</label>
-                          <div className="text-xs text-white/45">
-                            {tokenAddress && decimals !== undefined ? (
-                              <>
-                                {symbol ? `${symbol} · ` : ""}
-                                Decimals: {decimals}
-                              </>
-                            ) : (
-                              "Paste token contract address"
-                            )}
-                          </div>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm text-white/70">Token</label>
+                        <div className="text-xs text-white/45">
+                          {tokenAddress && decimals !== undefined ? (
+                            <>
+                              {symbol ? `${symbol} · ` : ""}
+                              Decimals: {decimals}
+                            </>
+                          ) : (
+                            "Paste token contract address"
+                          )}
                         </div>
-                        <Input
-                          value={tokenInput}
-                          onChange={(e) => setTokenInput(e.target.value)}
-                          placeholder="0x…"
-                          className="mt-1 bg-black/30 border-white/10 text-white placeholder:text-white/30 rounded-2xl"
-                        />
                       </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                              type="button"
-                              // Our Button component variants are: primary | secondary | ghost | outline | danger
-                              // Use primary for the "Approve" call-to-action.
-                              variant={needsApprove ? "primary" : "outline"}
-                              onClick={approveExact}
-                              disabled={!isConnected || !isBaseChain || pending || !tokenAddress || total <= 0n || !needsApprove}
-                              className={
-                                needsApprove
-                                  ? "rounded-2xl bg-white text-black hover:bg-white/90"
-                                  : "rounded-2xl bg-white/0 border-white/15 text-white/70"
-                              }
-                            >
-                              {pending && status?.toLowerCase().includes("approval") ? (
-                                <span className="inline-flex items-center gap-2">
-                                  <Loader2 className="h-4 w-4 animate-spin" /> Approving…
-                                </span>
-                              ) : (
-                                "Approve"
-                              )}
-                            </Button>
-                        <div className="mt-1 text-[11px] text-white/45">Approve grants Permit2 permission to pull exactly the batch total (not unlimited).</div>
+                      <Input
+                        value={tokenInput}
+                        onChange={(e) => setTokenInput(e.target.value)}
+                        placeholder="0x…"
+                        className="mt-1 bg-black/30 border-white/10 text-white placeholder:text-white/30 rounded-2xl"
+                      />
+                      <div className="mt-1 text-[11px] text-white/45">
+                        Approve grants Permit2 permission to pull exactly the batch total (not unlimited).
                       </div>
                     </div>
 
                     {tokenAddress && total > 0n && (
-                      <div className="text-xs text-white/45">
-                        Permit2 allowance (token → Permit2):{" "}
-                        <span className="text-white/70">
-                          {decimals !== undefined ? formatUnits(allowanceToPermit2, decimals) : allowanceToPermit2.toString()}
-                        </span>
+                      <div className="flex items-center justify-between text-xs text-white/45">
+                        <div>
+                          Permit2 allowance (token → Permit2):{" "}
+                          <span className="text-white/70">
+                            {decimals !== undefined
+                              ? formatUnits(allowanceToPermit2, decimals)
+                              : allowanceToPermit2.toString()}
+                          </span>
+                        </div>
+                        <div className={needsApprove ? "text-amber-200" : "text-emerald-200"}>
+                          {needsApprove ? "Needs approval" : "Approved"}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -846,7 +866,15 @@ export default function Home() {
                       <div
                         ref={numsRef}
                         aria-hidden
-                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs leading-6 text-white/35"
+                        className="select-none overflow-y-scroll scrollbar-none border-r border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs leading-6 text-white/35"
+                        onWheel={(e) => {
+                          const ta = textareaRef.current;
+                          if (!ta) return;
+                          const prev = ta.scrollTop;
+                          ta.scrollTop += e.deltaY;
+                          // prevent the page from stealing the wheel while the editor can scroll
+                          if (ta.scrollTop !== prev) e.preventDefault();
+                        }}
                         style={{ height: editorHeight }}
                       >
                         {Array.from({ length: lineCount }, (_, i) => (
@@ -867,7 +895,7 @@ export default function Home() {
                         placeholder={`0x1111...1111, 0.01\n0x2222...2222, 0.02`}
                         spellCheck={false}
                         className={[
-                          "w-full resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20",
+                          "w-full resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark",
                           expanded ? "overflow-y-hidden" : "overflow-y-auto",
                         ].join(" ")}
                         style={{
@@ -907,30 +935,66 @@ export default function Home() {
                           <Loader2 className="h-4 w-4 animate-spin" /> Sending…
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-2">
-                          Send ETH <ExternalLink className="h-4 w-4 opacity-70" />
-                        </span>
+                        "Send ETH"
                       )}
                     </Button>
                   ) : (
-                    <Button
-                      type="button"
-                      onClick={sendToken}
-                      disabled={!canSend}
-                      className="w-full rounded-2xl bg-white text-black hover:bg-white/90"
-                    >
-                      {pending ? (
-                        <span className="inline-flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" /> Sending…
-                        </span>
-                      ) : needsApprove ? (
-                        "Approve first"
-                      ) : (
-                        <span className="inline-flex items-center gap-2">
-                          Send Token <ExternalLink className="h-4 w-4 opacity-70" />
-                        </span>
-                      )}
-                    </Button>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Button
+                        type="button"
+                        onClick={approveExact}
+                        disabled={
+                          !isConnected ||
+                          !isBaseChain ||
+                          pending ||
+                          !tokenAddress ||
+                          total <= 0n ||
+                          !needsApprove
+                        }
+                        className={
+                          needsApprove
+                            ? "w-full rounded-2xl bg-white text-black hover:bg-white/90"
+                            : "w-full rounded-2xl bg-white/0 border border-white/15 text-white/70"
+                        }
+                      >
+                        {pending && status?.toLowerCase().includes("approval") ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Approving…
+                          </span>
+                        ) : !needsApprove && tokenAddress && total > 0n ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Check className="h-4 w-4" /> Approved
+                          </span>
+                        ) : (
+                          "Approve"
+                        )}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        onClick={sendToken}
+                        disabled={
+                          !isConnected ||
+                          !isBaseChain ||
+                          pending ||
+                          !!invalidLine ||
+                          recipients.length === 0 ||
+                          !tokenAddress ||
+                          decimals === undefined ||
+                          total <= 0n ||
+                          needsApprove
+                        }
+                        className="w-full rounded-2xl bg-white text-black hover:bg-white/90"
+                      >
+                        {pending && !status?.toLowerCase().includes("approval") ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Sending…
+                          </span>
+                        ) : (
+                          "Send Token"
+                        )}
+                      </Button>
+                    </div>
                   )}
 
                   {status ? (
@@ -972,10 +1036,14 @@ export default function Home() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-8 w-8 rounded-xl bg-white/0 border-white/15 text-white/70 hover:bg-white/10"
-                        onClick={() => copyToClipboard(MULTISENDER_ADDRESS)}
+                        aria-label="Copy contract address"
+                        className="h-8 w-8 p-0 rounded-xl bg-white/0 border-white/15 text-white/70 hover:bg-white/10"
+                        onClick={async () => {
+                          const ok = await copyToClipboard(MULTISENDER_ADDRESS);
+                          if (ok) flashCopied("contract");
+                        }}
                       >
-                        <Copy className="h-4 w-4" />
+                        {copied === "contract" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
                     </div>
 
