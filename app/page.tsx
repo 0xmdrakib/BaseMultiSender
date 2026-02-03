@@ -48,6 +48,9 @@ const TIP_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_TIP_ADDRESS ?? "")
 const EXPLORER_TX = (hash: string) => `https://basescan.org/tx/${hash}`;
 const EXPLORER_ADDR = (addr: string) => `https://basescan.org/address/${addr}`;
 
+// Split large sends into multiple transactions for reliability.
+const MAX_RECIPIENTS_PER_TX = 500;
+
 // ---------- ABIs ----------
 const multisenderAbi = [
   {
@@ -360,10 +363,25 @@ export default function Home() {
   const [tokenInput, setTokenInput] = useState("");
   const tokenAddress = (isAddress(tokenInput) ? (getAddress(tokenInput) as Address) : undefined);
 
-  // Receipt
-  const [txHash, setTxHash] = useState<string | null>(null);
+  // Execution status (approve/send)
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  // Send receipts (only after successful send txs; approvals do not create receipts)
+  const [receipts, setReceipts] = useState<
+    Array<{
+      hash: `0x${string}`;
+      part: number;
+      parts: number;
+      recipients: number;
+      amountLabel: string;
+    }>
+  >([]);
+  const [sendProgress, setSendProgress] = useState<{
+    parts: number;
+    current: number;
+    confirmed: number;
+  } | null>(null);
 
   // Fee estimate (ETH is accurate pre-tx; ERC20 is shown right before send)
   const [feeWei, setFeeWei] = useState<bigint | undefined>(undefined);
@@ -497,7 +515,8 @@ export default function Home() {
 
   function resetAll() {
     setRawList("");
-    setTxHash(null);
+    setReceipts([]);
+    setSendProgress(null);
     setStatus(null);
   }
 
@@ -639,7 +658,8 @@ export default function Home() {
       .join("\n");
 
     setRawList(cleaned);
-    setTxHash(null);
+    setReceipts([]);
+    setSendProgress(null);
     setStatus(null);
   }
 
@@ -654,10 +674,8 @@ export default function Home() {
 
     setPending(true);
     setStatus("Preparing approval…");
-    setTxHash(null);
 
     const wait = async (hash: `0x${string}`, label: string) => {
-      setTxHash(hash);
       setStatus(label);
       await publicClient?.waitForTransactionReceipt({ hash });
     };
@@ -720,7 +738,8 @@ export default function Home() {
   }
 
 
-    async function sendEth() {
+    
+  async function sendEth() {
     if (!address) return;
     if (!isBaseChain) {
       setStatus("Please switch to Base mainnet.");
@@ -729,14 +748,14 @@ export default function Home() {
     if (recipients.length === 0) return;
     if (invalidLine) return;
 
-    const MAX_RECIPIENTS_PER_TX = 500;
-    const batchCount = Math.ceil(recipients.length / MAX_RECIPIENTS_PER_TX);
+    const parts = Math.ceil(recipients.length / MAX_RECIPIENTS_PER_TX);
 
     setPending(true);
-    setTxHash(null);
+    setReceipts([]);
+    setSendProgress({ parts, current: 1, confirmed: 0 });
 
     try {
-      for (let i = 0; i < batchCount; i++) {
+      for (let i = 0; i < parts; i++) {
         const start = i * MAX_RECIPIENTS_PER_TX;
         const end = Math.min(start + MAX_RECIPIENTS_PER_TX, recipients.length);
 
@@ -744,10 +763,12 @@ export default function Home() {
         const batchAmounts = amounts.slice(start, end);
         const batchTotal = batchAmounts.reduce((acc, x) => acc + x, 0n);
 
+        setSendProgress({ parts, current: i + 1, confirmed: i });
+
         setStatus(
-          batchCount > 1
-            ? `Submitting batch ${i + 1}/${batchCount}…`
-            : "Preparing transaction…"
+          parts > 1
+            ? `Part ${i + 1}/${parts}: confirm in your wallet… (${batchRecipients.length} recipients)`
+            : "Confirm in your wallet…"
         );
 
         const hash = await writeContractAsync({
@@ -758,21 +779,32 @@ export default function Home() {
           value: batchTotal,
         });
 
-        setTxHash(hash);
         setStatus(
-          batchCount > 1
-            ? `Batch ${i + 1}/${batchCount} submitted. Waiting for confirmation…`
+          parts > 1
+            ? `Part ${i + 1}/${parts} submitted. Waiting for confirmation…`
             : "Submitted. Waiting for confirmation…"
         );
 
         await publicClient?.waitForTransactionReceipt({ hash });
 
-        if (batchCount > 1 && i < batchCount - 1) {
-          setStatus(`Batch ${i + 1}/${batchCount} confirmed. Continuing…`);
+        const amountLabel = `${Number(formatEther(batchTotal)).toLocaleString(undefined, {
+          maximumFractionDigits: 8,
+        })} ETH`;
+
+        setReceipts((prev) => [
+          ...prev,
+          { hash, part: i + 1, parts, recipients: batchRecipients.length, amountLabel },
+        ]);
+
+        setSendProgress({ parts, current: Math.min(i + 2, parts), confirmed: i + 1 });
+
+        if (parts > 1 && i < parts - 1) {
+          setStatus(`Part ${i + 1}/${parts} confirmed. Continuing…`);
         }
       }
 
-      setStatus(batchCount > 1 ? "All batches sent successfully." : "Batch sent successfully.");
+      setStatus(parts > 1 ? "All parts confirmed." : "Transaction confirmed.");
+      setSendProgress(null);
     } catch (e: any) {
       setStatus(e?.shortMessage || e?.message || "Transaction failed.");
     } finally {
@@ -781,7 +813,7 @@ export default function Home() {
   }
 
 
-    async function sendToken() {
+  async function sendToken() {
     if (!address) return;
     if (!isBaseChain) {
       setStatus("Please switch to Base mainnet.");
@@ -797,22 +829,24 @@ export default function Home() {
       return;
     }
 
-    const MAX_RECIPIENTS_PER_TX = 500;
-    const batchCount = Math.ceil(recipients.length / MAX_RECIPIENTS_PER_TX);
+    const parts = Math.ceil(recipients.length / MAX_RECIPIENTS_PER_TX);
 
     setPending(true);
-    setTxHash(null);
+    setReceipts([]);
+    setSendProgress({ parts, current: 1, confirmed: 0 });
 
     try {
       let nextNonce = Number(permit2Nonce);
 
-      for (let i = 0; i < batchCount; i++) {
+      for (let i = 0; i < parts; i++) {
         const start = i * MAX_RECIPIENTS_PER_TX;
         const end = Math.min(start + MAX_RECIPIENTS_PER_TX, recipients.length);
 
         const batchRecipients = recipients.slice(start, end);
         const batchAmounts = amounts.slice(start, end);
         const batchTotal = batchAmounts.reduce((acc, x) => acc + x, 0n);
+
+        setSendProgress({ parts, current: i + 1, confirmed: i });
 
         // Build Permit2 PermitSingle for this batch
         const now = Math.floor(Date.now() / 1000);
@@ -837,9 +871,9 @@ export default function Home() {
         ) as any;
 
         setStatus(
-          batchCount > 1
-            ? `Batch ${i + 1}/${batchCount}: preparing signature…`
-            : "Preparing signature…"
+          parts > 1
+            ? `Part ${i + 1}/${parts}: sign Permit2… (${batchRecipients.length} recipients)`
+            : "Sign Permit2…"
         );
 
         const signature = await signTypedDataAsync({
@@ -850,9 +884,9 @@ export default function Home() {
         } as any);
 
         setStatus(
-          batchCount > 1
-            ? `Batch ${i + 1}/${batchCount}: submitting transaction…`
-            : "Submitting transaction…"
+          parts > 1
+            ? `Part ${i + 1}/${parts}: confirm transaction…`
+            : "Confirm transaction…"
         );
 
         const hash = await writeContractAsync({
@@ -862,10 +896,9 @@ export default function Home() {
           args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
         });
 
-        setTxHash(hash);
         setStatus(
-          batchCount > 1
-            ? `Batch ${i + 1}/${batchCount} submitted. Waiting for confirmation…`
+          parts > 1
+            ? `Part ${i + 1}/${parts} submitted. Waiting for confirmation…`
             : "Submitted. Waiting for confirmation…"
         );
 
@@ -874,12 +907,24 @@ export default function Home() {
         // Permit2 nonce is consumed only when the tx succeeds.
         nextNonce += 1;
 
-        if (batchCount > 1 && i < batchCount - 1) {
-          setStatus(`Batch ${i + 1}/${batchCount} confirmed. Continuing…`);
+        const amountLabel = `${Number(formatUnits(batchTotal, decimals)).toLocaleString(undefined, {
+          maximumFractionDigits: 8,
+        })} ${symbol || "TOKEN"}`;
+
+        setReceipts((prev) => [
+          ...prev,
+          { hash, part: i + 1, parts, recipients: batchRecipients.length, amountLabel },
+        ]);
+
+        setSendProgress({ parts, current: Math.min(i + 2, parts), confirmed: i + 1 });
+
+        if (parts > 1 && i < parts - 1) {
+          setStatus(`Part ${i + 1}/${parts} confirmed. Continuing…`);
         }
       }
 
-      setStatus(batchCount > 1 ? "All batches sent successfully." : "Batch sent successfully.");
+      setStatus(parts > 1 ? "All parts confirmed." : "Transaction confirmed.");
+      setSendProgress(null);
       // refresh nonce/allowances
       permit2Allowance.refetch?.();
     } catch (e: any) {
@@ -888,6 +933,7 @@ export default function Home() {
       setPending(false);
     }
   }
+
 
 
   // Derived UI strings
@@ -1133,12 +1179,13 @@ export default function Home() {
                         value={rawList}
                         onChange={(e) => {
                           setRawList(e.target.value);
-                          setTxHash(null);
+                          setReceipts([]);
+    setSendProgress(null);
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
-                        placeholder={`0x1111...1111,0.01
-0x2222...2222,0.02`}
+                        placeholder={`0x1111...1111, 0.01
+0x2222...2222, 0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
@@ -1250,6 +1297,12 @@ export default function Home() {
 
                   {status ? (
                     <div className="mt-3 rounded-xl bg-black/30 ring-1 ring-white/10 px-3 py-2 text-sm text-white/70">
+                      {sendProgress && sendProgress.parts > 1 ? (
+                        <div className="mb-1 text-xs text-white/50">
+                          Sending in {sendProgress.parts} parts (max {MAX_RECIPIENTS_PER_TX}/tx) • Confirmed{" "}
+                          {sendProgress.confirmed}/{sendProgress.parts}
+                        </div>
+                      ) : null}
                       {status}
                     </div>
                   ) : null}
@@ -1331,12 +1384,14 @@ export default function Home() {
               </Card>
 
               {/* Receipt */}
-              {txHash ? (
+              {receipts.length ? (
                 <Card className="bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
                   <CardHeader className="pb-3 px-4 pt-4 sm:px-6 sm:pt-6">
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle className="text-white">Receipt</CardTitle>
-                      <Badge className="bg-white/10 text-white/70 ring-1 ring-white/10">{shortAddr(txHash)}</Badge>
+                      <Badge className="bg-white/10 text-white/70 ring-1 ring-white/10">
+                        {receipts.length}/{receipts[0].parts}
+                      </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3 px-4 pb-4 sm:px-6 sm:pb-6">
@@ -1355,26 +1410,46 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div className="text-sm text-white/70">Tx hash</div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
-                          onClick={() => window.open(EXPLORER_TX(txHash), "_blank")}
+                    <div className="space-y-2">
+                      {receipts.map((r) => (
+                        <div
+                          key={r.hash}
+                          className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-4"
                         >
-                          Explorer <ExternalLink className="ml-2 h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
-                          onClick={() => copyToClipboard(txHash)}
-                        >
-                          Copy <Copy className="ml-2 h-4 w-4" />
-                        </Button>
-                      </div>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-white/85">
+                                Part {r.part}/{r.parts}
+                              </div>
+                              <div className="mt-0.5 text-xs text-white/50">
+                                {r.recipients} recipients • {r.amountLabel}
+                              </div>
+                            </div>
+                            <Badge className="bg-white/10 text-white/70 ring-1 ring-white/10">
+                              {shortAddr(r.hash)}
+                            </Badge>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                              onClick={() => window.open(EXPLORER_TX(r.hash), "_blank")}
+                            >
+                              Explorer <ExternalLink className="ml-2 h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                              onClick={() => copyToClipboard(r.hash)}
+                            >
+                              Copy <Copy className="ml-2 h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
@@ -1382,8 +1457,8 @@ export default function Home() {
             </div>
           </div>
 
-          <footer className="mt-10 text-xs text-white/40">
-            Built for Base. Non-custodial.
+          <footer className="mt-10 text-center text-xs text-white/40">
+            © 2026 Md. Rakib • made with love and passion • All Rights Reserved.
           </footer>
         </div>
       </main>
@@ -1403,7 +1478,7 @@ export default function Home() {
                 <div>
                   <CardTitle className="text-white">Tip</CardTitle>
                   <CardDescription>
-                    Send a small Base ETH tip. Presets are in USD; we show the approximate ETH equivalent.
+                    Support the developer, Send a small Base ETH tip
                   </CardDescription>
                 </div>
                 <Button
