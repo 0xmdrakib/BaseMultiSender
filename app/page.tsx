@@ -906,8 +906,8 @@ export default function Home() {
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
-                        placeholder={`0x1111...1111, 0.01
-0x2222...2222, 0.02`}
+                        placeholder={`0x1111...1111,0.01
+0x2222...2222,0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
