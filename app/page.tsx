@@ -436,8 +436,7 @@ export default function Home() {
     abi: erc20Abi,
     functionName: "allowance",
     args: address && tokenAddress ? [address, PERMIT2_ADDRESS] : undefined,
-    // Watch so the UI updates immediately after an approval tx is confirmed.
-    query: { enabled: !!address && !!tokenAddress && mode === "ERC20", watch: true },
+    query: { enabled: !!address && !!tokenAddress && mode === "ERC20" },
   });
 
   // Permit2 allowance tuple (gives us nonce for the signature)
@@ -446,7 +445,7 @@ export default function Home() {
     abi: permit2Abi,
     functionName: "allowance",
     args: address && tokenAddress ? [address, tokenAddress, MULTISENDER_ADDRESS] : undefined,
-    query: { enabled: !!address && !!tokenAddress && mode === "ERC20", watch: true },
+    query: { enabled: !!address && !!tokenAddress && mode === "ERC20" },
   });
 
   const allowanceToPermit2 = tokenAllowanceToPermit2.data ?? 0n;
