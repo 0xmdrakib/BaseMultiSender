@@ -461,10 +461,12 @@ export default function Home() {
         // Some exports put "address amount" in one column.
         if (!c1 && /\s+/.test(c0)) {
           const parts = c0.split(/\s+/);
-          return `${(parts[0] ?? "").trim()}, ${(parts[1] ?? "").trim()}`.trim();
+          // Keep the exact `address,amount` format (no extra spaces injected).
+          return `${(parts[0] ?? "").trim()},${(parts[1] ?? "").trim()}`.trim();
         }
 
-        return `${c0}, ${c1}`.trim();
+        // Keep the exact `address,amount` format (no extra spaces injected).
+        return `${c0},${c1}`.trim();
       })
       .filter(Boolean)
       .join("\n");
