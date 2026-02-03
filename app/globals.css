@@ -23,6 +23,13 @@ body {
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
+
+/* Mobile browsers can render fixed backgrounds jankily; keep desktop unchanged. */
+@media (max-width: 640px) {
+  body {
+    background-attachment: scroll;
+  }
+}
 /* Make the app feel crisp */
 * {
   -webkit-tap-highlight-color: transparent;
