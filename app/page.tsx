@@ -710,35 +710,35 @@ export default function Home() {
 
   return (
     <>
-      <main className="min-h-screen px-6 py-10">
+      <main className="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
         <div className="mx-auto max-w-6xl">
           {/* Header */}
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/12 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
                 <img src="/logo-mark.png" alt="Multi Sender" className="h-full w-full object-contain" />
               </div>
 
               <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-3xl font-semibold tracking-tight text-white">Base MultiSender</h1>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Base MultiSender</h1>
                   <Badge className="bg-white/10 text-white/80 ring-1 ring-white/10">No protocol fee</Badge>
                 </div>
                 <p className="mt-1 text-sm text-white/60">Non-custodial. You pay only network gas.</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 sm:justify-end">
               <WalletConnectButton />
             </div>
           </div>
 
-          <div className="my-8 h-px bg-white/10" />
+          <div className="my-6 h-px bg-white/10 sm:my-8" />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {/* Left: composer */}
             <Card className="lg:col-span-7 bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
-              <CardHeader className="pb-4">
+              <CardHeader className="pb-4 px-4 pt-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <div className="inline-flex items-center gap-1 rounded-2xl bg-white/5 ring-1 ring-white/10 p-1">
@@ -771,7 +771,7 @@ export default function Home() {
                     <Badge className="bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-500/20">Strict</Badge>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     <input
                       ref={csvInputRef}
                       type="file"
@@ -787,7 +787,7 @@ export default function Home() {
                       type="button"
                       variant="outline"
                       onClick={() => csvInputRef.current?.click()}
-                      className="gap-2 bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
+                      className="gap-2 bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white w-full sm:w-auto"
                     >
                       <Upload className="h-4 w-4" />
                       Upload CSV
@@ -797,7 +797,7 @@ export default function Home() {
                       type="button"
                       variant="outline"
                       onClick={resetAll}
-                      className="bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white"
+                      className="bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white w-full sm:w-auto"
                     >
                       Reset
                     </Button>
@@ -805,11 +805,11 @@ export default function Home() {
                 </div>
               </CardHeader>
 
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6">
                 {mode === "ERC20" && (
                   <div className="space-y-3">
                     <div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <label className="text-sm text-white/70">Token</label>
                         <div className="text-xs text-white/45">
                           {tokenAddress && decimals !== undefined ? (
@@ -855,7 +855,7 @@ export default function Home() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm text-white/70">Recipients</label>
-                    <div className="flex items-center gap-2 text-xs text-white/45">
+                    <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-white/45">
                       Format: address,amount (one per line)
                       <Button
                         type="button"
@@ -869,7 +869,7 @@ export default function Home() {
                   </div>
 
                   <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-black/30">
-                    <div className="flex">
+                    <div className="flex min-w-0">
                       <div
                         ref={numsRef}
                         aria-hidden
@@ -906,14 +906,14 @@ export default function Home() {
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
-                        placeholder={`0x1111...1111,0.01
-0x2222...2222,0.02`}
+                        placeholder={`0x1111...1111, 0.01
+0x2222...2222, 0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
                           // Disable line-wrapping so each logical line remains one visual line.
                           // This keeps line numbers perfectly aligned with each address line.
-                          "w-full resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
+                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
                           "overflow-y-auto",
                         ].join(" ")}
                         style={{
@@ -942,7 +942,7 @@ export default function Home() {
                 </div>
 
                 {/* Primary action */}
-                <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-4">
+                <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3 sm:p-4">
                   {mode === "ETH" ? (
                     <Button
                       type="button"
@@ -1029,14 +1029,14 @@ export default function Home() {
             {/* Right: review */}
             <div className="lg:col-span-5 space-y-6">
               <Card className="bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-3 px-4 pt-4 sm:px-6 sm:pt-6">
                   <CardTitle className="text-white">Review</CardTitle>
                   <CardDescription className="text-white/50">
                     Strict mode is atomic (all-or-nothing). If any transfer fails, the transaction reverts.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                <CardContent className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6">
+                  <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm">
                     <div className="text-white/50">Network</div>
                     <div className="text-right text-white/80">Base mainnet</div>
 
@@ -1044,7 +1044,7 @@ export default function Home() {
                     <div className="text-right text-white/80">{address ? shortAddr(address) : "—"}</div>
 
                     <div className="text-white/50">Contract</div>
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <a
                         href={EXPLORER_ADDR(MULTISENDER_ADDRESS)}
                         target="_blank"
@@ -1102,14 +1102,14 @@ export default function Home() {
               {/* Receipt */}
               {txHash ? (
                 <Card className="bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
-                  <CardHeader className="pb-3">
+                  <CardHeader className="pb-3 px-4 pt-4 sm:px-6 sm:pt-6">
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle className="text-white">Receipt</CardTitle>
                       <Badge className="bg-white/10 text-white/70 ring-1 ring-white/10">{shortAddr(txHash)}</Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="grid grid-cols-3 gap-3">
+                  <CardContent className="space-y-3 px-4 pb-4 sm:px-6 sm:pb-6">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3">
                         <div className="text-xs text-white/50">Recipients</div>
                         <div className="mt-1 text-lg font-semibold text-white">{recipients.length}</div>
