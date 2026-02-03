@@ -275,6 +275,8 @@ export default function Home() {
   const numsInnerRef = useRef<HTMLDivElement | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
+
   const [copied, setCopied] = useState<null | "contract" | "tx">(null);
 
   // Token
@@ -292,33 +294,17 @@ export default function Home() {
 
   // Visible editor sizing
   const visibleLines = 10;
+  const expandedLines = 18;
   const lineHeightPx = 24;
+  const viewportLines = expanded ? expandedLines : visibleLines;
 
   const lineCount = useMemo(() => {
     const lines = safeParseLines(rawList);
-    // count at least visibleLines so the editor looks stable
-    return Math.max(visibleLines, lines.length || visibleLines);
-  }, [rawList]);
+    // count at least viewportLines so the editor looks stable
+    return Math.max(viewportLines, lines.length || viewportLines);
+  }, [rawList, viewportLines]);
 
   // Keep line numbers perfectly in sync with the textarea scroll.
-  // Important: the number rail itself should NOT be independently scrollable
-  // (otherwise users have to scroll twice). Instead, we translate the numbers
-  // by the textarea's scrollTop.
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-
-    const sync = () => {
-      const st = ta.scrollTop;
-      if (numsInnerRef.current) {
-        numsInnerRef.current.style.transform = `translateY(-${st}px)`;
-      }
-    };
-
-    sync();
-    ta.addEventListener("scroll", sync, { passive: true });
-    return () => ta.removeEventListener("scroll", sync);
-  }, []);
 
   const tokenDecimalsRead = useReadContract({
     address: tokenAddress,
@@ -342,6 +328,12 @@ export default function Home() {
   const amounts = parsed.amounts;
   const total = parsed.total;
   const invalidLine = parsed.invalidLine;
+
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    setEditorScrollTop(ta.scrollTop);
+  }, [expanded, rawList]);
 
   // Token allowance to Permit2 (on the token contract)
   const tokenAllowanceToPermit2 = useReadContract({
@@ -684,7 +676,7 @@ export default function Home() {
     recipients.length > 0 &&
     (mode === "ETH" ? total > 0n : !!tokenAddress && decimals !== undefined && total > 0n && !needsApprove);
 
-  const editorHeight = expanded ? `${lineCount * lineHeightPx}px` : `${visibleLines * lineHeightPx}px`;
+  const editorHeight = `${viewportLines * lineHeightPx}px`;
 
   if (!mounted) {
     // Avoid hydration flicker / mismatches by rendering a stable placeholder on first paint.
@@ -871,13 +863,14 @@ export default function Home() {
                           // Scroll the textarea (single source of truth).
                           const prev = ta.scrollTop;
                           ta.scrollTop += e.deltaY;
+                          setEditorScrollTop(ta.scrollTop);
 
                           // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
                         style={{ height: editorHeight }}
                       >
-                        <div ref={numsInnerRef}>
+                        <div ref={numsInnerRef} style={{ transform: `translateY(-${editorScrollTop}px)` }}>
                           {Array.from({ length: lineCount }, (_, i) => (
                             <div key={i} style={{ height: `${lineHeightPx}px` }} className="leading-6">
                               {i + 1}
@@ -894,14 +887,16 @@ export default function Home() {
                           setTxHash(null);
                           setStatus(null);
                         }}
-                        placeholder={`0x1111...1111, 0.01\n0x2222...2222, 0.02`}
+                        onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
+                        placeholder={`0x1111...1111, 0.01
+0x2222...2222, 0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
                           // Disable line-wrapping so each logical line remains one visual line.
                           // This keeps line numbers perfectly aligned with each address line.
                           "w-full resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
-                          expanded ? "overflow-y-hidden" : "overflow-y-auto",
+                          "overflow-y-auto",
                         ].join(" ")}
                         style={{
                           height: editorHeight,
