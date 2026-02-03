@@ -720,7 +720,7 @@ export default function Home() {
   }
 
 
-  async function sendEth() {
+    async function sendEth() {
     if (!address) return;
     if (!isBaseChain) {
       setStatus("Please switch to Base mainnet.");
@@ -729,25 +729,50 @@ export default function Home() {
     if (recipients.length === 0) return;
     if (invalidLine) return;
 
+    const MAX_RECIPIENTS_PER_TX = 500;
+    const batchCount = Math.ceil(recipients.length / MAX_RECIPIENTS_PER_TX);
+
     setPending(true);
-    setStatus("Preparing transaction…");
     setTxHash(null);
 
     try {
-      const hash = await writeContractAsync({
-        address: MULTISENDER_ADDRESS,
-        abi: multisenderAbi,
-        functionName: "sendETH",
-        args: [recipients, amounts],
-        value: total,
-      });
+      for (let i = 0; i < batchCount; i++) {
+        const start = i * MAX_RECIPIENTS_PER_TX;
+        const end = Math.min(start + MAX_RECIPIENTS_PER_TX, recipients.length);
 
-      setTxHash(hash);
-      setStatus("Submitted. Waiting for confirmation…");
+        const batchRecipients = recipients.slice(start, end);
+        const batchAmounts = amounts.slice(start, end);
+        const batchTotal = batchAmounts.reduce((acc, x) => acc + x, 0n);
 
-      await publicClient?.waitForTransactionReceipt({ hash });
+        setStatus(
+          batchCount > 1
+            ? `Submitting batch ${i + 1}/${batchCount}…`
+            : "Preparing transaction…"
+        );
 
-      setStatus("Batch sent successfully.");
+        const hash = await writeContractAsync({
+          address: MULTISENDER_ADDRESS,
+          abi: multisenderAbi,
+          functionName: "sendETH",
+          args: [batchRecipients, batchAmounts],
+          value: batchTotal,
+        });
+
+        setTxHash(hash);
+        setStatus(
+          batchCount > 1
+            ? `Batch ${i + 1}/${batchCount} submitted. Waiting for confirmation…`
+            : "Submitted. Waiting for confirmation…"
+        );
+
+        await publicClient?.waitForTransactionReceipt({ hash });
+
+        if (batchCount > 1 && i < batchCount - 1) {
+          setStatus(`Batch ${i + 1}/${batchCount} confirmed. Continuing…`);
+        }
+      }
+
+      setStatus(batchCount > 1 ? "All batches sent successfully." : "Batch sent successfully.");
     } catch (e: any) {
       setStatus(e?.shortMessage || e?.message || "Transaction failed.");
     } finally {
@@ -755,7 +780,8 @@ export default function Home() {
     }
   }
 
-  async function sendToken() {
+
+    async function sendToken() {
     if (!address) return;
     if (!isBaseChain) {
       setStatus("Please switch to Base mainnet.");
@@ -771,55 +797,89 @@ export default function Home() {
       return;
     }
 
+    const MAX_RECIPIENTS_PER_TX = 500;
+    const batchCount = Math.ceil(recipients.length / MAX_RECIPIENTS_PER_TX);
+
     setPending(true);
-    setStatus("Preparing signature…");
     setTxHash(null);
 
     try {
-      // Build Permit2 PermitSingle
-      const now = Math.floor(Date.now() / 1000);
-      const expiration = now + 60 * 60 * 24 * 30; // 30 days
-      const sigDeadline = BigInt(now + 60 * 20); // 20 minutes
+      let nextNonce = Number(permit2Nonce);
 
-      const permitSingle = {
-        details: {
-          token: tokenAddress,
-          amount: total, // uint160 in contract; contract will validate bounds
-          expiration,
-          nonce: Number(permit2Nonce),
-        },
-        spender: MULTISENDER_ADDRESS,
-        sigDeadline,
-      };
-      const { domain, types, values } = AllowanceTransfer.getPermitData(
-        permitSingle as any,
-        PERMIT2_ADDRESS,
-        chainId ?? base.id
-      ) as any;
+      for (let i = 0; i < batchCount; i++) {
+        const start = i * MAX_RECIPIENTS_PER_TX;
+        const end = Math.min(start + MAX_RECIPIENTS_PER_TX, recipients.length);
 
-      // Permit2 SDK returns { domain, types, values }. viem/wagmi requires an explicit primaryType.
-      const signature = await signTypedDataAsync({
-        domain,
-        types,
-        primaryType: "PermitSingle",
-        message: values,
-      } as any);
+        const batchRecipients = recipients.slice(start, end);
+        const batchAmounts = amounts.slice(start, end);
+        const batchTotal = batchAmounts.reduce((acc, x) => acc + x, 0n);
 
-      setStatus("Submitting transaction…");
+        // Build Permit2 PermitSingle for this batch
+        const now = Math.floor(Date.now() / 1000);
+        const expiration = now + 60 * 60 * 24 * 30; // 30 days
+        const sigDeadline = BigInt(now + 60 * 20); // 20 minutes
 
-      const hash = await writeContractAsync({
-        address: MULTISENDER_ADDRESS,
-        abi: multisenderAbi,
-        functionName: "sendERC20Permit2",
-        args: [permitSingle as any, signature as any, recipients, amounts],
-      });
+        const permitSingle = {
+          details: {
+            token: tokenAddress,
+            amount: batchTotal, // exact batch total (not unlimited)
+            expiration,
+            nonce: nextNonce,
+          },
+          spender: MULTISENDER_ADDRESS,
+          sigDeadline,
+        };
 
-      setTxHash(hash);
-      setStatus("Submitted. Waiting for confirmation…");
+        const { domain, types, values } = AllowanceTransfer.getPermitData(
+          permitSingle as any,
+          PERMIT2_ADDRESS,
+          chainId ?? base.id
+        ) as any;
 
-      await publicClient?.waitForTransactionReceipt({ hash });
+        setStatus(
+          batchCount > 1
+            ? `Batch ${i + 1}/${batchCount}: preparing signature…`
+            : "Preparing signature…"
+        );
 
-      setStatus("Batch sent successfully.");
+        const signature = await signTypedDataAsync({
+          domain,
+          types,
+          primaryType: "PermitSingle",
+          message: values,
+        } as any);
+
+        setStatus(
+          batchCount > 1
+            ? `Batch ${i + 1}/${batchCount}: submitting transaction…`
+            : "Submitting transaction…"
+        );
+
+        const hash = await writeContractAsync({
+          address: MULTISENDER_ADDRESS,
+          abi: multisenderAbi,
+          functionName: "sendERC20Permit2",
+          args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
+        });
+
+        setTxHash(hash);
+        setStatus(
+          batchCount > 1
+            ? `Batch ${i + 1}/${batchCount} submitted. Waiting for confirmation…`
+            : "Submitted. Waiting for confirmation…"
+        );
+
+        await publicClient?.waitForTransactionReceipt({ hash });
+
+        // Permit2 nonce is consumed only when the tx succeeds.
+        nextNonce += 1;
+
+        if (batchCount > 1 && i < batchCount - 1) {
+          setStatus(`Batch ${i + 1}/${batchCount} confirmed. Continuing…`);
+        }
+      }
+
+      setStatus(batchCount > 1 ? "All batches sent successfully." : "Batch sent successfully.");
       // refresh nonce/allowances
       permit2Allowance.refetch?.();
     } catch (e: any) {
@@ -828,6 +888,7 @@ export default function Home() {
       setPending(false);
     }
   }
+
 
   // Derived UI strings
   const totalLabel =
@@ -1076,8 +1137,8 @@ export default function Home() {
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
-                        placeholder={`0x1111...1111,0.01
-0x2222...2222,0.02`}
+                        placeholder={`0x1111...1111, 0.01
+0x2222...2222, 0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
