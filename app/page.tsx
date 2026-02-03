@@ -194,6 +194,18 @@ function parseRecipients({
   const amounts: bigint[] = [];
   let total = 0n;
 
+  // When in ERC20 mode but we don't yet know token decimals (because token contract address
+  // hasn't been provided / fetched), we still want to validate *addresses* and basic amount
+  // formatting without marking lines as invalid due to missing decimals.
+  const tokenDecimalsReady = mode === "ETH" || decimals !== undefined;
+  const looksLikeNumber = (s: string) => /^\d+(?:\.\d+)?$/.test(s);
+  const isNonZeroDecimal = (s: string) => {
+    // Treat "0", "0.0", "0.00" as zero.
+    const cleaned = s.replace(/^0+/, "");
+    if (!cleaned) return false;
+    return /[1-9]/.test(cleaned.replace(".", ""));
+  };
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -206,23 +218,27 @@ function parseRecipients({
     if (!isAddress(addrRaw)) return { recipients, amounts, total, invalidLine: trimmed };
     if (!amtRaw) return { recipients, amounts, total, invalidLine: trimmed };
 
-    let amt: bigint;
-    try {
-      if (mode === "ETH") {
-        amt = parseEther(amtRaw);
-      } else {
-        if (decimals === undefined) return { recipients, amounts, total, invalidLine: trimmed };
-        amt = parseUnits(amtRaw, decimals);
-      }
-    } catch {
+    // Validate amount format even before token decimals are available.
+    if (!looksLikeNumber(amtRaw) || !isNonZeroDecimal(amtRaw)) {
       return { recipients, amounts, total, invalidLine: trimmed };
     }
 
-    if (amt <= 0n) return { recipients, amounts, total, invalidLine: trimmed };
-
     recipients.push(getAddress(addrRaw));
-    amounts.push(amt);
-    total += amt;
+
+    // Only convert to base units once token decimals are known.
+    if (tokenDecimalsReady) {
+      try {
+        const amt = mode === "ETH" ? parseEther(amtRaw) : parseUnits(amtRaw, decimals as number);
+        if (amt <= 0n) return { recipients, amounts, total, invalidLine: trimmed };
+        amounts.push(amt);
+        total += amt;
+      } catch {
+        return { recipients, amounts, total, invalidLine: trimmed };
+      }
+    } else {
+      // Placeholder until decimals are known; UI will show Total as "—" anyway.
+      amounts.push(0n);
+    }
   }
 
   return { recipients, amounts, total };
@@ -915,6 +931,8 @@ export default function Home() {
                         <span className="ml-2 text-rose-300">
                           Invalid line: <span className="text-rose-200/90">"{invalidLine}"</span>
                         </span>
+                      ) : mode === "ERC20" && !tokenAddress && recipients.length > 0 ? (
+                        <span className="ml-2 text-amber-200">Paste your token contract address to continue.</span>
                       ) : null}
                     </div>
                     <div className="text-white/45">
