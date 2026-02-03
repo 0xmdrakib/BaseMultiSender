@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAccount, usePublicClient, useReadContract, useSignTypedData, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract, useSendTransaction, useSignTypedData, useWriteContract } from "wagmi";
 import { base } from "wagmi/chains";
 import {
   encodeFunctionData,
@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Check, Copy, ExternalLink, Loader2, Upload } from "lucide-react";
+import { Check, Copy, ExternalLink, HandCoins, Loader2, Upload, X } from "lucide-react";
 import WalletConnectButton from "@/components/WalletConnect";
 
 // ---------- Config (env first, validated, with safe fallbacks) ----------
@@ -38,6 +38,11 @@ const MULTISENDER_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_MULTISENDER_ADDRE
 const PERMIT2_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ?? "")
   ? (getAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS as string) as Address)
   : (DEFAULT_PERMIT2_ADDRESS as Address));
+
+// Optional: tip recipient address (your wallet). If not set, the UI will prompt you to configure it.
+const TIP_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_TIP_ADDRESS ?? "")
+  ? (getAddress(process.env.NEXT_PUBLIC_TIP_ADDRESS as string) as Address)
+  : undefined);
 
 // BaseScan (mainnet)
 const EXPLORER_TX = (hash: string) => `https://basescan.org/tx/${hash}`;
@@ -276,6 +281,7 @@ export default function Home() {
   const publicClient = usePublicClient({ chainId: base.id });
 
   const { writeContractAsync } = useWriteContract();
+  const { sendTransactionAsync } = useSendTransaction();
   const { signTypedDataAsync } = useSignTypedData();
 
   const [mounted, setMounted] = useState(false);
@@ -294,6 +300,61 @@ export default function Home() {
   const [editorScrollTop, setEditorScrollTop] = useState(0);
 
   const [copied, setCopied] = useState<null | "contract" | "tx">(null);
+
+  // Tip modal (Base ETH)
+  const [tipOpen, setTipOpen] = useState(false);
+  const [ethUsd, setEthUsd] = useState<number | null>(null);
+  const [ethUsdLoading, setEthUsdLoading] = useState(false);
+  const [tipPreset, setTipPreset] = useState<"10" | "100" | "1000" | "custom">("10");
+  const [tipUsdInput, setTipUsdInput] = useState("10");
+  const [tipEthInput, setTipEthInput] = useState("");
+  const [tipLastEdited, setTipLastEdited] = useState<"usd" | "eth">("usd");
+  const [tipPending, setTipPending] = useState(false);
+  const [tipTxHash, setTipTxHash] = useState<string | null>(null);
+  const [tipStatus, setTipStatus] = useState<string | null>(null);
+
+  // Fetch ETH/USD price for tip UX (best-effort, client-side).
+  useEffect(() => {
+    if (!tipOpen) return;
+    let cancelled = false;
+
+    async function run() {
+      setEthUsdLoading(true);
+      try {
+        // CoinGecko simple price endpoint.
+        const res = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+          { cache: "no-store" }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const price = json?.ethereum?.usd;
+        if (!cancelled && typeof price === "number" && isFinite(price) && price > 0) {
+          setEthUsd(price);
+        }
+      } catch {
+        // Keep the UI usable even if the price feed fails.
+      } finally {
+        if (!cancelled) setEthUsdLoading(false);
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [tipOpen]);
+
+  // Once we have a price, sync the derived field based on the user's last edit.
+  useEffect(() => {
+    if (!tipOpen) return;
+    if (!ethUsd) return;
+    if (tipLastEdited === "eth" && tipEthInput) {
+      syncTipFromEth(tipEthInput);
+    } else {
+      syncTipFromUsd(tipUsdInput);
+    }
+  }, [ethUsd, tipOpen]);
 
   // Token
   const [tokenInput, setTokenInput] = useState("");
@@ -443,6 +504,96 @@ export default function Home() {
   function flashCopied(which: "contract" | "tx") {
     setCopied(which);
     window.setTimeout(() => setCopied(null), 1200);
+  }
+
+  function trimZeros(n: string) {
+    return n.replace(/(\.\d*?)0+$/u, "$1").replace(/\.$/u, "");
+  }
+
+  function syncTipFromUsd(nextUsd: string) {
+    setTipLastEdited("usd");
+    setTipUsdInput(nextUsd);
+    if (!ethUsd) {
+      setTipEthInput("");
+      return;
+    }
+    const usd = Number(nextUsd);
+    if (!isFinite(usd) || usd <= 0) {
+      setTipEthInput("");
+      return;
+    }
+    const eth = usd / ethUsd;
+    setTipEthInput(trimZeros(eth.toFixed(8)));
+  }
+
+  function syncTipFromEth(nextEth: string) {
+    setTipLastEdited("eth");
+    setTipEthInput(nextEth);
+    if (!ethUsd) {
+      return;
+    }
+    const eth = Number(nextEth);
+    if (!isFinite(eth) || eth <= 0) {
+      setTipUsdInput("");
+      return;
+    }
+    const usd = eth * ethUsd;
+    setTipUsdInput(trimZeros(usd.toFixed(2)));
+  }
+
+  async function sendTip() {
+    setTipStatus(null);
+    setTipTxHash(null);
+
+    if (!isConnected || !address) {
+      setTipStatus("Connect your wallet to tip.");
+      return;
+    }
+    if (!isBaseChain) {
+      setTipStatus("Please switch to Base mainnet.");
+      return;
+    }
+    if (!TIP_ADDRESS) {
+      setTipStatus("Set NEXT_PUBLIC_TIP_ADDRESS (your wallet) to receive tips.");
+      return;
+    }
+    if (!tipEthInput) {
+      setTipStatus("Enter a tip amount.");
+      return;
+    }
+
+    let value: bigint;
+    try {
+      value = parseEther(tipEthInput);
+    } catch {
+      setTipStatus("Invalid tip amount.");
+      return;
+    }
+    if (value <= 0n) {
+      setTipStatus("Tip amount must be greater than zero.");
+      return;
+    }
+
+    setTipPending(true);
+    setTipStatus("Submitting tip…");
+
+    try {
+      const hash = await sendTransactionAsync({
+        to: TIP_ADDRESS,
+        value,
+        chainId: base.id,
+      });
+
+      setTipTxHash(hash);
+      setTipStatus("Tip submitted. Waiting for confirmation…");
+
+      await publicClient?.waitForTransactionReceipt({ hash });
+      setTipStatus("Tip confirmed. Thank you!");
+    } catch (e: any) {
+      setTipStatus(e?.shortMessage || e?.message || "Tip failed.");
+    } finally {
+      setTipPending(false);
+    }
   }
 
   async function onUploadCsv(file: File) {
@@ -729,6 +880,25 @@ export default function Home() {
             </div>
 
             <div className="flex items-center gap-3 sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                aria-label="Tip"
+                className="h-10 w-10 p-0 rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                onClick={() => {
+                  setTipStatus(null);
+                  setTipTxHash(null);
+                  setTipOpen(true);
+                  // Keep the preset selection but ensure inputs stay in sync.
+                  if (tipLastEdited === "eth") {
+                    syncTipFromEth(tipEthInput);
+                  } else {
+                    syncTipFromUsd(tipUsdInput);
+                  }
+                }}
+              >
+                <HandCoins className="h-4 w-4" />
+              </Button>
               <WalletConnectButton />
             </div>
           </div>
@@ -906,8 +1076,8 @@ export default function Home() {
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
-                        placeholder={`0x1111...1111,0.01
-0x2222...2222,0.02`}
+                        placeholder={`0x1111...1111, 0.01
+0x2222...2222, 0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
@@ -1156,6 +1326,183 @@ export default function Home() {
           </footer>
         </div>
       </main>
+
+      {tipOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close tip dialog"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setTipOpen(false)}
+          />
+
+          <Card className="relative w-full max-w-md rounded-3xl bg-white/[0.06] ring-1 ring-white/12 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.9)]">
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-white">Tip</CardTitle>
+                  <CardDescription>
+                    Send a small Base ETH tip. Presets are in USD; we show the approximate ETH equivalent.
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-9 w-9 p-0 rounded-2xl"
+                  onClick={() => setTipOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="rounded-2xl bg-black/25 ring-1 ring-white/10 p-3">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="text-white/60">Recipient</div>
+                  <div className="text-right text-white/80">
+                    {TIP_ADDRESS ? (
+                      <a
+                        href={EXPLORER_ADDR(TIP_ADDRESS)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:text-white underline-offset-4 hover:underline"
+                      >
+                        {shortAddr(TIP_ADDRESS)}
+                      </a>
+                    ) : (
+                      <span className="text-amber-200/90">Configure NEXT_PUBLIC_TIP_ADDRESS</span>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+                  <div className="text-white/45">Rate</div>
+                  <div className="text-right text-white/60">
+                    {ethUsdLoading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> fetching…
+                      </span>
+                    ) : ethUsd ? (
+                      <>1 ETH ≈ ${ethUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</>
+                    ) : (
+                      <>Price unavailable</>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {([
+                  "10",
+                  "100",
+                  "1000",
+                ] as const).map((v) => (
+                  <Button
+                    key={v}
+                    type="button"
+                    variant="outline"
+                    className={
+                      "rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10 " +
+                      (tipPreset === v ? "bg-white text-black hover:bg-zinc-200" : "")
+                    }
+                    onClick={() => {
+                      setTipPreset(v);
+                      syncTipFromUsd(v);
+                    }}
+                  >
+                    ${v}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={
+                    "rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10 " +
+                    (tipPreset === "custom" ? "bg-white text-black hover:bg-zinc-200" : "")
+                  }
+                  onClick={() => setTipPreset("custom")}
+                >
+                  Custom
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="mb-1 text-xs text-white/60">USD</div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-white/50">$</span>
+                    <Input
+                      value={tipUsdInput}
+                      inputMode="decimal"
+                      placeholder="10"
+                      className="pl-7"
+                      onChange={(e) => {
+                        setTipPreset("custom");
+                        syncTipFromUsd(e.target.value);
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs text-white/60">ETH</div>
+                  <div className="relative">
+                    <Input
+                      value={tipEthInput}
+                      inputMode="decimal"
+                      placeholder={ethUsd ? "0.00" : "—"}
+                      className="pr-14"
+                      onChange={(e) => {
+                        setTipPreset("custom");
+                        syncTipFromEth(e.target.value);
+                      }}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-white/50">ETH</span>
+                  </div>
+                </div>
+              </div>
+
+              {tipStatus ? <div className="text-sm text-white/70">{tipStatus}</div> : null}
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="rounded-2xl"
+                  disabled={
+                    tipPending ||
+                    !isConnected ||
+                    !isBaseChain ||
+                    !TIP_ADDRESS ||
+                    !tipEthInput ||
+                    (() => {
+                      try {
+                        return parseEther(tipEthInput) <= 0n;
+                      } catch {
+                        return true;
+                      }
+                    })()
+                  }
+                  onClick={sendTip}
+                >
+                  {tipPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Send tip
+                </Button>
+
+                {tipTxHash ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                    onClick={() => window.open(EXPLORER_TX(tipTxHash), "_blank")}
+                  >
+                    Explorer <ExternalLink className="ml-2 h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </>
   );
 }
