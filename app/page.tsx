@@ -436,7 +436,8 @@ export default function Home() {
     abi: erc20Abi,
     functionName: "allowance",
     args: address && tokenAddress ? [address, PERMIT2_ADDRESS] : undefined,
-    query: { enabled: !!address && !!tokenAddress && mode === "ERC20" },
+    // Watch so the UI updates immediately after an approval tx is confirmed.
+    query: { enabled: !!address && !!tokenAddress && mode === "ERC20", watch: true },
   });
 
   // Permit2 allowance tuple (gives us nonce for the signature)
@@ -445,7 +446,7 @@ export default function Home() {
     abi: permit2Abi,
     functionName: "allowance",
     args: address && tokenAddress ? [address, tokenAddress, MULTISENDER_ADDRESS] : undefined,
-    query: { enabled: !!address && !!tokenAddress && mode === "ERC20" },
+    query: { enabled: !!address && !!tokenAddress && mode === "ERC20", watch: true },
   });
 
   const allowanceToPermit2 = tokenAllowanceToPermit2.data ?? 0n;
@@ -691,9 +692,9 @@ export default function Home() {
 
       await wait(hash, "Approval submitted. Waiting for confirmation…");
 
-      // refresh reads
-      tokenAllowanceToPermit2.refetch?.();
-      permit2Allowance.refetch?.();
+      // Refresh reads (await) so needsApprove flips immediately and Send enables.
+      if (tokenAllowanceToPermit2.refetch) await tokenAllowanceToPermit2.refetch();
+      if (permit2Allowance.refetch) await permit2Allowance.refetch();
 
       setStatus("Approved. You can send now.");
     } catch (e: any) {
@@ -722,8 +723,8 @@ export default function Home() {
 
           await wait(hash2, "Approval submitted. Waiting for confirmation…");
 
-          tokenAllowanceToPermit2.refetch?.();
-          permit2Allowance.refetch?.();
+          if (tokenAllowanceToPermit2.refetch) await tokenAllowanceToPermit2.refetch();
+          if (permit2Allowance.refetch) await permit2Allowance.refetch();
 
           setStatus("Approved. You can send now.");
         } catch (e2: any) {
@@ -1184,8 +1185,8 @@ export default function Home() {
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
-                        placeholder={`0x1111...1111,0.01
-0x2222...2222,0.02`}
+                        placeholder={`0x1111...1111, 0.01
+0x2222...2222, 0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
