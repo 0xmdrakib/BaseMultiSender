@@ -971,16 +971,16 @@ export default function Home() {
       <main className="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
         <div className="mx-auto max-w-6xl">
           {/* Header */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.02] p-4 shadow-[0_18px_70px_-50px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div className="flex items-start gap-3">
-              <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/12 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
+              <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
                 <img src="/logo-mark.png" alt="Multi Sender" className="h-full w-full object-contain" />
               </div>
 
               <div>
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Base MultiSender</h1>
-                  <Badge className="bg-white/10 text-white/80 ring-1 ring-white/10">No protocol fee</Badge>
+                  <Badge>No protocol fee</Badge>
                 </div>
                 <p className="mt-1 text-sm text-white/60">Non-custodial. You pay only network gas.</p>
               </div>
@@ -991,7 +991,7 @@ export default function Home() {
                 type="button"
                 variant="outline"
                 aria-label="Tip"
-                className="h-10 w-10 p-0 rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                className="h-10 w-10 p-0 rounded-2xl"
                 onClick={() => {
                   setTipStatus(null);
                   setTipTxHash(null);
@@ -1010,11 +1010,11 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="my-6 h-px bg-white/10 sm:my-8" />
+          <div className="my-6 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent sm:my-8" />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {/* Left: composer */}
-            <Card className="lg:col-span-7 bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
+            <Card className="lg:col-span-7">
               <CardHeader className="pb-4 px-4 pt-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -1025,8 +1025,8 @@ export default function Home() {
                         className={[
                           "px-3 py-1.5 text-sm font-medium rounded-xl transition",
                           mode === "ETH"
-                            ? "bg-white text-black shadow"
-                            : "text-white/80 hover:bg-white/10",
+                            ? "bg-[#0000ff] text-white shadow-[0_10px_30px_-18px_rgba(0,0,255,0.8)]"
+                            : "text-white/80 hover:bg-white/[0.06]",
                         ].join(" ")}
                       >
                         ETH
@@ -1037,15 +1037,15 @@ export default function Home() {
                         className={[
                           "px-3 py-1.5 text-sm font-medium rounded-xl transition",
                           mode === "ERC20"
-                            ? "bg-white text-black shadow"
-                            : "text-white/80 hover:bg-white/10",
+                            ? "bg-[#0000ff] text-white shadow-[0_10px_30px_-18px_rgba(0,0,255,0.8)]"
+                            : "text-white/80 hover:bg-white/[0.06]",
                         ].join(" ")}
                       >
                         ERC20
                       </button>
                     </div>
 
-                    <Badge className="bg-emerald-500/10 text-emerald-200 ring-1 ring-emerald-500/20">Strict</Badge>
+                    <Badge tone="good">Strict</Badge>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -1064,7 +1064,7 @@ export default function Home() {
                       type="button"
                       variant="outline"
                       onClick={() => csvInputRef.current?.click()}
-                      className="gap-2 bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white w-full sm:w-auto"
+                      className="gap-2 w-full sm:w-auto"
                     >
                       <Upload className="h-4 w-4" />
                       Upload CSV
@@ -1074,7 +1074,7 @@ export default function Home() {
                       type="button"
                       variant="outline"
                       onClick={resetAll}
-                      className="bg-white/0 border-white/15 text-white/80 hover:bg-white/10 hover:text-white w-full sm:w-auto"
+                      className="w-full sm:w-auto"
                     >
                       Reset
                     </Button>
@@ -1103,7 +1103,7 @@ export default function Home() {
                         value={tokenInput}
                         onChange={(e) => setTokenInput(e.target.value)}
                         placeholder="0x…"
-                        className="mt-1 bg-black/30 border-white/10 text-white placeholder:text-white/30 rounded-2xl"
+                        className="mt-1"
                       />
                       <div className="mt-1 text-[11px] text-white/45">
                         Approve grants Permit2 permission to pull exactly the batch total (not unlimited).
@@ -1138,19 +1138,20 @@ export default function Home() {
                         type="button"
                         variant="outline"
                         onClick={() => setExpanded((v) => !v)}
-                        className="h-7 rounded-xl bg-white/0 border-white/15 text-white/70 hover:bg-white/10"
+                        size="sm"
+                        className="h-7 rounded-xl"
                       >
                         {expanded ? "Collapse" : "Expand"}
                       </Button>
                     </div>
                   </div>
 
-                  <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-black/30">
+                  <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-white/[0.02]">
                     <div className="flex min-w-0">
                       <div
                         ref={numsRef}
                         aria-hidden
-                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.03] px-3 py-2 text-right text-xs leading-6 text-white/35"
+                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.02] px-3 py-2 text-right text-xs leading-6 text-white/35"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1184,8 +1185,8 @@ export default function Home() {
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
-                        placeholder={`0x1111...1111,0.01
-0x2222...2222,0.02`}
+                        placeholder={`0x1111...1111, 0.01
+0x2222...2222, 0.02`}
                         spellCheck={false}
                         wrap="off"
                         className={[
@@ -1226,7 +1227,8 @@ export default function Home() {
                       type="button"
                       onClick={sendEth}
                       disabled={!canSend}
-                      className="w-full rounded-2xl bg-white text-black hover:bg-white/90"
+                      variant="primary"
+                      className="w-full"
                     >
                       {pending ? (
                         <span className="inline-flex items-center gap-2">
@@ -1249,11 +1251,8 @@ export default function Home() {
                           total <= 0n ||
                           !needsApprove
                         }
-                        className={
-                          needsApprove
-                            ? "w-full rounded-2xl bg-white text-black hover:bg-white/90"
-                            : "w-full rounded-2xl bg-white/0 border border-white/15 text-white/70"
-                        }
+                        variant={needsApprove ? "primary" : "outline"}
+                        className="w-full"
                       >
                         {pending && status?.toLowerCase().includes("approval") ? (
                           <span className="inline-flex items-center gap-2">
@@ -1282,7 +1281,8 @@ export default function Home() {
                           total <= 0n ||
                           needsApprove
                         }
-                        className="w-full rounded-2xl bg-white text-black hover:bg-white/90"
+                        variant="primary"
+                        className="w-full"
                       >
                         {pending && !status?.toLowerCase().includes("approval") ? (
                           <span className="inline-flex items-center gap-2">
@@ -1312,7 +1312,7 @@ export default function Home() {
 
             {/* Right: review */}
             <div className="lg:col-span-5 space-y-6">
-              <Card className="bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
+              <Card>
                 <CardHeader className="pb-3 px-4 pt-4 sm:px-6 sm:pt-6">
                   <CardTitle className="text-white">Review</CardTitle>
                   <CardDescription className="text-white/50">
@@ -1341,7 +1341,7 @@ export default function Home() {
                         type="button"
                         variant="outline"
                         aria-label="Copy contract address"
-                        className="h-8 w-8 p-0 rounded-xl bg-white/0 border-white/15 text-white/70 hover:bg-white/10"
+                        className="h-8 w-8 p-0 rounded-xl"
                         onClick={async () => {
                           const ok = await copyToClipboard(MULTISENDER_ADDRESS);
                           if (ok) flashCopied("contract");
@@ -1385,11 +1385,11 @@ export default function Home() {
 
               {/* Receipt */}
               {receipts.length ? (
-                <Card className="bg-white/[0.04] ring-1 ring-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.45)] rounded-3xl">
+                <Card>
                   <CardHeader className="pb-3 px-4 pt-4 sm:px-6 sm:pt-6">
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle className="text-white">Receipt</CardTitle>
-                      <Badge className="bg-white/10 text-white/70 ring-1 ring-white/10">
+                      <Badge>
                         {receipts.length}/{receipts[0].parts}
                       </Badge>
                     </div>
@@ -1425,7 +1425,7 @@ export default function Home() {
                                 {r.recipients} recipients • {r.amountLabel}
                               </div>
                             </div>
-                            <Badge className="bg-white/10 text-white/70 ring-1 ring-white/10">
+                            <Badge>
                               {shortAddr(r.hash)}
                             </Badge>
                           </div>
@@ -1434,7 +1434,7 @@ export default function Home() {
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                              className="rounded-2xl"
                               onClick={() => window.open(EXPLORER_TX(r.hash), "_blank")}
                             >
                               Explorer <ExternalLink className="ml-2 h-4 w-4" />
@@ -1442,7 +1442,7 @@ export default function Home() {
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                              className="rounded-2xl"
                               onClick={() => copyToClipboard(r.hash)}
                             >
                               Copy <Copy className="ml-2 h-4 w-4" />
@@ -1472,7 +1472,7 @@ export default function Home() {
             onClick={() => setTipOpen(false)}
           />
 
-          <Card className="relative w-full max-w-md rounded-3xl bg-white/[0.06] ring-1 ring-white/12 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.9)]">
+          <Card className="relative w-full max-w-md">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1536,11 +1536,8 @@ export default function Home() {
                   <Button
                     key={v}
                     type="button"
-                    variant="outline"
-                    className={
-                      "rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10 " +
-                      (tipPreset === v ? "bg-white text-black hover:bg-zinc-200" : "")
-                    }
+                    variant={tipPreset === v ? "primary" : "outline"}
+                    className="rounded-2xl"
                     onClick={() => {
                       setTipPreset(v);
                       syncTipFromUsd(v);
@@ -1551,11 +1548,8 @@ export default function Home() {
                 ))}
                 <Button
                   type="button"
-                  variant="outline"
-                  className={
-                    "rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10 " +
-                    (tipPreset === "custom" ? "bg-white text-black hover:bg-zinc-200" : "")
-                  }
+                  variant={tipPreset === "custom" ? "primary" : "outline"}
+                  className="rounded-2xl"
                   onClick={() => setTipPreset("custom")}
                 >
                   Custom
@@ -1628,7 +1622,7 @@ export default function Home() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-2xl bg-white/0 border-white/15 text-white/80 hover:bg-white/10"
+                    className="rounded-2xl"
                     onClick={() => window.open(EXPLORER_TX(tipTxHash), "_blank")}
                   >
                     Explorer <ExternalLink className="ml-2 h-4 w-4" />
