@@ -21,9 +21,10 @@ export default function WalletConnect() {
             {!connected ? (
               <button
                 onClick={openConnectModal}
-                className="group inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur px-3 py-2 sm:px-4 text-sm font-medium text-zinc-100 shadow-[0_10px_24px_rgba(0,0,0,0.35)] hover:bg-white/[0.10] hover:border-white/15 active:scale-[0.99] whitespace-nowrap"
+                className="group inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur px-3 py-2 sm:px-4 text-sm font-medium text-white/90 shadow-[0_14px_40px_-28px_rgba(0,0,0,0.9)] hover:bg-white/[0.09] hover:border-white/15 active:scale-[0.99] whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0000ff]/25"
               >
-                <Wallet className="h-4 w-4 text-zinc-200" />
+                <span className="h-2 w-2 rounded-full bg-[#0000ff] shadow-[0_0_0_4px_rgba(0,0,255,0.15)]" aria-hidden />
+                <Wallet className="h-4 w-4 text-white/80" />
                 <span className="hidden sm:inline">Connect Wallet</span>
                 <span className="sm:hidden">Connect</span>
               </button>
@@ -40,7 +41,7 @@ export default function WalletConnect() {
 
                 <button
                   onClick={openAccountModal}
-                  className="group inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur px-3 py-2 sm:px-4 text-sm font-medium text-zinc-100 shadow-[0_10px_24px_rgba(0,0,0,0.35)] hover:bg-white/[0.10] hover:border-white/15 active:scale-[0.99] max-w-[210px] sm:max-w-none"
+                  className="group inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur px-3 py-2 sm:px-4 text-sm font-medium text-white/90 shadow-[0_14px_40px_-28px_rgba(0,0,0,0.9)] hover:bg-white/[0.09] hover:border-white/15 active:scale-[0.99] max-w-[210px] sm:max-w-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0000ff]/25"
                   title={account?.address}
                 >
                   {chain?.hasIcon && chain.iconUrl ? (
