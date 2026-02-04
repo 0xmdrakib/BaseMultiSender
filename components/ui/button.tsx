@@ -17,17 +17,24 @@ export function Button({
   ...props
 }: Props) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition " +
-    "focus:outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center gap-2 rounded-2xl font-medium transition-colors duration-150 " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0000ff]/30 focus-visible:ring-offset-0 " +
+    "disabled:opacity-50 disabled:cursor-not-allowed";
 
   const variants: Record<string, string> = {
-    default: "bg-white text-black hover:bg-zinc-200",
-    primary: "bg-white text-black hover:bg-zinc-200",
-    secondary: "bg-white/10 text-zinc-100 hover:bg-white/15 border border-white/10",
-    ghost: "bg-transparent hover:bg-white/10 border border-transparent",
+    // Primary action uses Base Blue (#0000FF) with a restrained glow.
+    default:
+      "bg-[#0000ff] text-white hover:bg-[#0000ff]/90 border border-[#0000ff]/35 shadow-[0_14px_55px_-30px_rgba(0,0,255,0.9)]",
+    primary:
+      "bg-[#0000ff] text-white hover:bg-[#0000ff]/90 border border-[#0000ff]/35 shadow-[0_14px_55px_-30px_rgba(0,0,255,0.9)]",
+    secondary:
+      "bg-white/[0.06] text-white/90 hover:bg-white/[0.09] border border-white/10",
+    ghost:
+      "bg-transparent text-white/80 hover:bg-white/[0.06] border border-transparent",
     outline:
-      "bg-transparent text-zinc-100 hover:bg-white/10 border border-white/15",
-    danger: "bg-red-500/15 text-red-100 hover:bg-red-500/20 border border-red-500/20",
+      "bg-transparent text-white/85 hover:bg-white/[0.06] border border-white/15",
+    danger:
+      "bg-rose-500/15 text-rose-100 hover:bg-rose-500/20 border border-rose-500/20",
   };
 
   const sizes: Record<string, string> = {
