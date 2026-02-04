@@ -278,6 +278,16 @@ async function copyToClipboard(text: string) {
 }
 
 export default function Home() {
+  // UI helper: add thousands separators to a decimal string (keeps precision; no float conversion).
+  const groupDecimalString = (value: string) => {
+    const [intPartRaw, fracPart] = value.split(".");
+    const negative = intPartRaw.startsWith("-");
+    const intPart = negative ? intPartRaw.slice(1) : intPartRaw;
+
+    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const withSign = `${negative ? "-" : ""}${grouped}`;
+    return fracPart !== undefined && fracPart.length > 0 ? `${withSign}.${fracPart}` : withSign;
+  };
   const { address, chainId, isConnected } = useAccount();
   const isBaseChain = chainId === base.id;
 
@@ -1116,8 +1126,8 @@ export default function Home() {
                           Permit2 allowance (token → Permit2):{" "}
                           <span className="text-white/70">
                             {decimals !== undefined
-                              ? formatUnits(allowanceToPermit2, decimals)
-                              : allowanceToPermit2.toString()}
+                              ? groupDecimalString(formatUnits(allowanceToPermit2, decimals))
+                              : groupDecimalString(allowanceToPermit2.toString())}
                           </span>
                         </div>
                         <div className={needsApprove ? "text-amber-200" : "text-emerald-200"}>
