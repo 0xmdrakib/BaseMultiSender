@@ -307,7 +307,7 @@ export default function Home() {
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const numsRef = useRef<HTMLDivElement | null>(null);
-  const numsInnerRef = useRef<HTMLDivElement | null>(null);
+  // Line numbers container (kept scroll-synced with the textarea)
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const [editorScrollTop, setEditorScrollTop] = useState(0);
@@ -439,6 +439,16 @@ export default function Home() {
     if (!ta) return;
     setEditorScrollTop(ta.scrollTop);
   }, [expanded, rawList]);
+
+  // Keep the line numbers scroller perfectly locked to the textarea.
+  // Using scrollTop sync (instead of translateY) avoids edge-case drift near
+  // the bottom caused by textarea padding / scrollHeight differences.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    const nums = numsRef.current;
+    if (!ta || !nums) return;
+    nums.scrollTop = ta.scrollTop;
+  }, [editorScrollTop, expanded, rawList]);
 
   // Token allowance to Permit2 (on the token contract)
   const tokenAllowanceToPermit2 = useReadContract({
@@ -1161,7 +1171,7 @@ export default function Home() {
                       <div
                         ref={numsRef}
                         aria-hidden
-                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.02] px-3 py-2 text-right text-xs leading-6 text-white/35"
+                        className="select-none overflow-y-auto scrollbar-none border-r border-white/10 bg-white/[0.02] px-3 py-2 text-right font-mono text-sm leading-6 text-white/35"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1170,19 +1180,19 @@ export default function Home() {
                           const prev = ta.scrollTop;
                           ta.scrollTop += e.deltaY;
                           setEditorScrollTop(ta.scrollTop);
+                          const nums = numsRef.current;
+                          if (nums) nums.scrollTop = ta.scrollTop;
 
                           // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
                         style={{ height: editorHeight }}
                       >
-                        <div ref={numsInnerRef} style={{ transform: `translateY(-${editorScrollTop}px)` }}>
-                          {Array.from({ length: lineCount }, (_, i) => (
-                            <div key={i} style={{ height: `${lineHeightPx}px` }} className="leading-6">
-                              {i + 1}
-                            </div>
-                          ))}
-                        </div>
+                        {Array.from({ length: lineCount }, (_, i) => (
+                          <div key={i} className="h-6 leading-6">
+                            {i + 1}
+                          </div>
+                        ))}
                       </div>
 
                       <textarea
@@ -1202,7 +1212,7 @@ export default function Home() {
                         className={[
                           // Disable line-wrapping so each logical line remains one visual line.
                           // This keeps line numbers perfectly aligned with each address line.
-                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
+                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
                           "overflow-y-auto",
                         ].join(" ")}
                         style={{
