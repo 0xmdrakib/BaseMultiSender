@@ -5,7 +5,10 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_20px_80px_-40px_rgba(0,0,0,0.9)] backdrop-blur",
+        "relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] backdrop-blur-xl " +
+          "shadow-[0_25px_90px_-60px_rgba(0,0,0,0.92)] " +
+          "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px " +
+          "before:bg-gradient-to-r before:from-transparent before:via-[#0000ff]/70 before:to-transparent before:opacity-50",
         className
       )}
       {...props}
