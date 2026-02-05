@@ -51,6 +51,16 @@ const EXPLORER_ADDR = (addr: string) => `https://basescan.org/address/${addr}`;
 // Split large sends into multiple transactions for reliability.
 const MAX_RECIPIENTS_PER_TX = 500;
 
+// Logo rendering controls (so you can keep a non-square logo file but make it look centered and “filled”).
+// - NEXT_PUBLIC_LOGO_FIT: contain | scale-down | cover
+// - NEXT_PUBLIC_LOGO_ZOOM: e.g. 1.0 (no zoom) .. 1.25 (fills more if the PNG has transparent padding)
+const LOGO_FIT = (process.env.NEXT_PUBLIC_LOGO_FIT ?? "contain").toLowerCase();
+const LOGO_FIT_CLASS = LOGO_FIT === "cover" ? "object-cover" : LOGO_FIT === "scale-down" ? "object-scale-down" : "object-contain";
+const LOGO_ZOOM = (() => {
+  const n = Number(process.env.NEXT_PUBLIC_LOGO_ZOOM ?? "1.15");
+  return Number.isFinite(n) && n > 0 ? n : 1;
+})();
+
 // ---------- ABIs ----------
 const multisenderAbi = [
   {
@@ -994,7 +1004,12 @@ export default function Home() {
           <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.02] p-4 shadow-[0_18px_70px_-50px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div className="flex items-start gap-3">
               <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
-                <img src="/logo-mark.png" alt="Multi Sender" className="h-full w-full object-contain" />
+                <img
+                  src="/logo-mark.png"
+                  alt="Multi Sender"
+                  className={`h-full w-full ${LOGO_FIT_CLASS} object-center`}
+                  style={{ transform: `scale(${LOGO_ZOOM})` }}
+                />
               </div>
 
               <div>
