@@ -16,6 +16,6 @@
     "requiredCapabilities": ["actions.ready"],
     "splashImageUrl": "https://multisender.online/splash.png",
     "heroImageUrl": "https://multisender.online/hero.png",
-    "splashBackgroundColor": "#05070F"
+    "splashBackgroundColor": "#0000FF"
   }
 }
