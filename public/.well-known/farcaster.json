@@ -12,7 +12,7 @@
     "homeUrl": "https://multisender.online/",
     "canonicalDomain": "multisender.online",
     "requiredChains": ["eip155:8453"],
-    "tags": ["base", "tools", "payments"],
+    "tags": ["finance", "utility", "productivity"],
     "requiredCapabilities": ["actions.ready"],
     "splashImageUrl": "https://multisender.online/splash.png",
     "heroImageUrl": "https://multisender.online/hero.png",
