@@ -1015,7 +1015,6 @@ export default function Home() {
               <div>
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Base MultiSender</h1>
-                  <Badge>No protocol fee</Badge>
                 </div>
                 <p className="mt-1 text-sm text-white/60">Non-custodial. You pay only network gas.</p>
               </div>
