@@ -8,23 +8,16 @@
     "version": "1",
     "name": "Base MultiSender",
     "description": "0 protocol fee multi-sender on Base",
+    "primaryCategory": "utility",
     "iconUrl": "https://multisender.online/icon.png",
     "homeUrl": "https://multisender.online/",
     "canonicalDomain": "multisender.online",
-    "requiredChains": [
-      "eip155:8453"
-    ],
-    "tags": [
-      "base",
-      "tools",
-      "payments"
-    ],
-    "requiredCapabilities": [
-      "actions.ready"
-    ],
+    "requiredChains": ["eip155:8453"],
+    "tags": ["base", "tools", "payments"],
+    "requiredCapabilities": ["actions.ready"],
     "splashImageUrl": "https://multisender.online/splash.png",
     "heroImageUrl": "https://multisender.online/hero.png",
-    "splashBackgroundColor": "#0000FF",
-    "primaryCategory": "utility"
+    "imageUrl": "https://multisender.online/embed.png",
+    "splashBackgroundColor": "#0000FF"
   }
 }
