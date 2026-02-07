@@ -13,11 +13,6 @@ html, body {
 
 html {
   background-color: #05060a;
-}
-body {
-  margin: 0;
-  min-height: 100vh;
-  background-color: #05060a;
   background:
     radial-gradient(1200px 700px at 15% 10%, rgba(var(--base-blue-rgb) / 0.18), transparent 60%),
     radial-gradient(900px 600px at 85% 15%, rgba(var(--base-blue-rgb) / 0.10), transparent 55%),
@@ -25,14 +20,17 @@ body {
     linear-gradient(to bottom, #05060a, #07070c 55%, #05060a);
   background-repeat: no-repeat;
   background-attachment: fixed;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: transparent;
   text-rendering: optimizeLegibility;
 }
 
 /* Mobile browsers can render fixed backgrounds jankily; keep desktop unchanged. */
 @media (max-width: 640px) {
-  body {
-    background-attachment: scroll;
-  }
+  html { background-attachment: scroll; }
 }
 /* Make the app feel crisp */
 * {
