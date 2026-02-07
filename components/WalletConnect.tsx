@@ -1,9 +1,49 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ChevronDown, Wallet } from "lucide-react";
+import { sdk } from "@farcaster/miniapp-sdk";
+import { useConnect } from "wagmi";
+import { base } from "wagmi/chains";
+
+function useIsMiniApp() {
+  const [isMiniApp, setIsMiniApp] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ok = await sdk.isInMiniApp();
+        if (!cancelled) setIsMiniApp(Boolean(ok));
+      } catch {
+        if (!cancelled) setIsMiniApp(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return isMiniApp;
+}
 
 export default function WalletConnect() {
+  const isMiniApp = useIsMiniApp();
+  const { connectors, connectAsync, isPending } = useConnect();
+
+  const connectInMiniApp = async () => {
+    const connector = connectors[0];
+    if (!connector) return;
+
+    try {
+      await connectAsync({ connector, chainId: base.id });
+    } catch {
+      // User cancelled or host not available.
+    }
+  };
+
   return (
     <ConnectButton.Custom>
       {({ account, chain, mounted, openConnectModal, openAccountModal, openChainModal }) => {
@@ -20,7 +60,16 @@ export default function WalletConnect() {
           >
             {!connected ? (
               <button
-                onClick={openConnectModal}
+                onClick={() => {
+                  // In Mini App hosts, skip wallet selection and reconnect directly to the injected host wallet.
+                  // If the user disconnected, clicking connect should immediately reconnect.
+                  if (isMiniApp) {
+                    void connectInMiniApp();
+                    return;
+                  }
+                  openConnectModal();
+                }}
+                disabled={Boolean(isMiniApp && isPending)}
                 className="group inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur px-3 py-2 sm:px-4 text-sm font-medium text-white/90 shadow-[0_14px_40px_-28px_rgba(0,0,0,0.9)] hover:bg-white/[0.09] hover:border-white/15 active:scale-[0.99] whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0000ff]/25"
               >
                 <span className="h-2 w-2 rounded-full bg-[#0000ff] shadow-[0_0_0_4px_rgba(0,0,255,0.15)]" aria-hidden />
