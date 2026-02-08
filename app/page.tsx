@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAccount, usePublicClient, useReadContract, useSendTransaction, useSignTypedData, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract, useSendTransaction, useSignTypedData, useWalletClient, useWriteContract } from "wagmi";
 import { base } from "wagmi/chains";
 import {
   encodeFunctionData,
@@ -16,6 +16,8 @@ import {
 import { publicActionsL2 } from "viem/op-stack";
 import { AllowanceTransfer } from "@uniswap/permit2-sdk";
 import Papa from "papaparse";
+
+import { getRpcRequester, sendSponsoredCalls, supportsPaymasterService } from "@/lib/gasless";
 
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,8 @@ const MULTISENDER_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_MULTISENDER_ADDRE
 const PERMIT2_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ?? "")
   ? (getAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS as string) as Address)
   : (DEFAULT_PERMIT2_ADDRESS as Address));
+
+const PAYMASTER_PROXY_URL = process.env.NEXT_PUBLIC_PAYMASTER_PROXY_SERVER_URL ?? "";
 
 // Optional: tip recipient address (your wallet). If not set, the UI will prompt you to configure it.
 const TIP_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_TIP_ADDRESS ?? "")
@@ -302,6 +306,8 @@ export default function Home() {
   const isBaseChain = chainId === base.id;
 
   const publicClient = usePublicClient({ chainId: base.id });
+
+  const { data: walletClient } = useWalletClient({ chainId: base.id });
 
   const { writeContractAsync } = useWriteContract();
   const { sendTransactionAsync } = useSendTransaction();
@@ -784,6 +790,12 @@ export default function Home() {
     setReceipts([]);
     setSendProgress({ parts, current: 1, confirmed: 0 });
 
+    const rpcRequest = walletClient ? getRpcRequester(walletClient) : null;
+    const canSponsor =
+      Boolean(PAYMASTER_PROXY_URL) &&
+      Boolean(rpcRequest) &&
+      (await supportsPaymasterService({ request: rpcRequest!, address, chainId: base.id }));
+
     try {
       for (let i = 0; i < parts; i++) {
         const start = i * MAX_RECIPIENTS_PER_TX;
@@ -801,13 +813,31 @@ export default function Home() {
             : "Confirm in your wallet…"
         );
 
-        const hash = await writeContractAsync({
-          address: MULTISENDER_ADDRESS,
-          abi: multisenderAbi,
-          functionName: "sendETH",
-          args: [batchRecipients, batchAmounts],
-          value: batchTotal,
-        });
+        const hash = canSponsor
+          ? await sendSponsoredCalls({
+              request: rpcRequest!,
+              address,
+              chainId: base.id,
+              paymasterProxyUrl: PAYMASTER_PROXY_URL,
+              calls: [
+                {
+                  to: MULTISENDER_ADDRESS,
+                  data: encodeFunctionData({
+                    abi: multisenderAbi,
+                    functionName: "sendETH",
+                    args: [batchRecipients, batchAmounts],
+                  }),
+                  value: batchTotal,
+                },
+              ],
+            })
+          : await writeContractAsync({
+              address: MULTISENDER_ADDRESS,
+              abi: multisenderAbi,
+              functionName: "sendETH",
+              args: [batchRecipients, batchAmounts],
+              value: batchTotal,
+            });
 
         setStatus(
           parts > 1
@@ -865,6 +895,12 @@ export default function Home() {
     setReceipts([]);
     setSendProgress({ parts, current: 1, confirmed: 0 });
 
+    const rpcRequest = walletClient ? getRpcRequester(walletClient) : null;
+    const canSponsor =
+      Boolean(PAYMASTER_PROXY_URL) &&
+      Boolean(rpcRequest) &&
+      (await supportsPaymasterService({ request: rpcRequest!, address, chainId: base.id }));
+
     try {
       let nextNonce = Number(permit2Nonce);
 
@@ -919,12 +955,29 @@ export default function Home() {
             : "Confirm transaction…"
         );
 
-        const hash = await writeContractAsync({
-          address: MULTISENDER_ADDRESS,
-          abi: multisenderAbi,
-          functionName: "sendERC20Permit2",
-          args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
-        });
+        const hash = canSponsor
+          ? await sendSponsoredCalls({
+              request: rpcRequest!,
+              address,
+              chainId: base.id,
+              paymasterProxyUrl: PAYMASTER_PROXY_URL,
+              calls: [
+                {
+                  to: MULTISENDER_ADDRESS,
+                  data: encodeFunctionData({
+                    abi: multisenderAbi,
+                    functionName: "sendERC20Permit2",
+                    args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
+                  }),
+                },
+              ],
+            })
+          : await writeContractAsync({
+              address: MULTISENDER_ADDRESS,
+              abi: multisenderAbi,
+              functionName: "sendERC20Permit2",
+              args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
+            });
 
         setStatus(
           parts > 1
