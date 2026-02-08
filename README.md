@@ -42,4 +42,4 @@ Perfect for:
 
 ⛽️You need to pay Only gas fee:
 • Most of others bulk sender taking a huge protocol fee from user.
-• And i built this with 0 protocol fee. 
+• And i built this with 0 protocol fee.
