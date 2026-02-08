@@ -52,11 +52,36 @@ export async function supportsPaymasterService(params: {
 }
 
 export function isUserRejected(err: unknown): boolean {
-  const e = err as any;
-  // EIP-1193 user rejected request
-  if (e?.code === 4001) return true;
-  const msg = String(e?.message ?? "").toLowerCase();
-  return msg.includes("user rejected") || msg.includes("rejected the request");
+  // Many libs (wagmi/viem/walletconnect) wrap the underlying ProviderRpcError.
+  // Walk the "cause" chain + common nested fields to reliably detect user rejection.
+  const seen = new Set<any>();
+
+  const stack: any[] = [err];
+  while (stack.length) {
+    const e = stack.pop();
+    if (!e || seen.has(e)) continue;
+    seen.add(e);
+
+    const code = (e as any)?.code;
+    if (code === 4001) return true; // EIP-1193 user rejected request
+
+    const msg = String((e as any)?.message ?? (e as any)?.shortMessage ?? "").toLowerCase();
+    if (msg.includes("user rejected") || msg.includes("user denied") || msg.includes("rejected the request")) return true;
+
+    // Common wrappers
+    const cause = (e as any)?.cause;
+    const data = (e as any)?.data;
+    const details = (e as any)?.details;
+    if (cause) stack.push(cause);
+    if (data) stack.push(data);
+    if (details) stack.push(details);
+
+    // Some providers nest the original error here.
+    const original = (e as any)?.data?.originalError || (e as any)?.originalError;
+    if (original) stack.push(original);
+  }
+
+  return false;
 }
 
 function looksLikeUnsupportedSendCalls(err: unknown): boolean {
@@ -71,8 +96,10 @@ function looksLikeUnsupportedSendCalls(err: unknown): boolean {
 
 function looksLikeVersionIssue(err: unknown): boolean {
   const e = err as any;
+  // MetaMask and other wallets commonly use -32000 for "Version not supported" with wallet_sendCalls.
+  if (e?.code === -32000) return true;
   const msg = String(e?.message ?? "").toLowerCase();
-  return msg.includes("version") || msg.includes("invalid params") || msg.includes("invalid argument");
+  return msg.includes("version not supported");
 }
 
 async function walletSendCalls(params: {
@@ -82,27 +109,47 @@ async function walletSendCalls(params: {
   paymasterProxyUrl: string;
   calls: Array<{ to: Address; data: Hex; value?: bigint }>;
   version: "2.0.0" | "1.0";
-}): Promise<Hex> {
+}): Promise<string> {
   const { request, address, chainIdHex, paymasterProxyUrl, calls, version } = params;
 
-  return (await request({
+  const id =
+    (globalThis as any)?.crypto?.randomUUID?.() ??
+    `calls-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  // Base + MetaMask both support EIP-5792 style batching; Base's docs require version "2.0.0" and an id,
+  // and many wallets behave better when value is always present (0x0 for no ETH). 
+  const result = await request({
     method: "wallet_sendCalls",
     params: [
       {
         version,
+        id,
         from: address,
         chainId: chainIdHex,
+        atomicRequired: true,
         calls: calls.map((c) => ({
           to: c.to,
           data: c.data,
-          ...(typeof c.value === "bigint" ? { value: toHexValue(c.value) } : {}),
+          value: toHexValue(typeof c.value === "bigint" ? c.value : 0n),
         })),
         capabilities: {
           paymasterService: { url: paymasterProxyUrl },
         },
       },
     ],
-  })) as Hex;
+  });
+
+  // Different wallets return slightly different shapes for the bundle identifier.
+  const bundleId =
+    typeof result === "string"
+      ? result
+      : result?.id ?? result?.batchId ?? result?.callsId;
+
+  if (typeof bundleId !== "string" || bundleId.length === 0) {
+    throw new Error("wallet_sendCalls returned an unexpected result shape (missing batch id).");
+  }
+
+  return bundleId;
 }
 
 export async function sendSponsoredCalls(params: {
@@ -126,12 +173,16 @@ export async function sendSponsoredCalls(params: {
 
   const chainIdHex = toHexChainId(chainId);
 
-  let id: Hex;
+  let id: string;
   try {
     id = await walletSendCalls({ request, address, chainIdHex, paymasterProxyUrl, calls, version: "2.0.0" });
   } catch (e) {
+    // If the user cancels/rejects the wallet confirmation, DO NOT retry (otherwise they see a 2nd prompt).
+    if (isUserRejected(e)) throw e;
+
     if (looksLikeUnsupportedSendCalls(e)) throw e;
-    // Some wallets only support "1.0". If the error looks like a version/params issue, retry once with "1.0".
+
+    // Some wallets may only support an older draft; retry once only if the error clearly indicates version mismatch.
     if (looksLikeVersionIssue(e)) {
       id = await walletSendCalls({ request, address, chainIdHex, paymasterProxyUrl, calls, version: "1.0" });
     } else {
