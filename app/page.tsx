@@ -16,6 +16,7 @@ import {
 import { publicActionsL2 } from "viem/op-stack";
 import { AllowanceTransfer } from "@uniswap/permit2-sdk";
 import Papa from "papaparse";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 import { getRpcRequester, sendSponsoredCalls, supportsPaymasterService } from "@/lib/gasless";
 
@@ -24,8 +25,33 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Check, Copy, ExternalLink, HandCoins, Loader2, Upload, X } from "lucide-react";
+import { Check, Copy, ExternalLink, HandCoins, Loader2, Share2, Upload, X } from "lucide-react";
 import WalletConnectButton from "@/components/WalletConnect";
+
+const APP_URL = "https://multisender.online/";
+const SHARE_TEXT = "I just used Base Multi Sender";
+
+function useIsMiniApp() {
+  const [isMiniApp, setIsMiniApp] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ok = await sdk.isInMiniApp();
+        if (!cancelled) setIsMiniApp(Boolean(ok));
+      } catch {
+        if (!cancelled) setIsMiniApp(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return isMiniApp;
+}
 
 // ---------- Config (env first, validated, with safe fallbacks) ----------
 const DEFAULT_MULTISENDER_ADDRESS = "0xAd7d4483Eb4352B71aCc8C3C81482079b0636d55" as const;
@@ -201,10 +227,12 @@ function parseRecipients({
   raw,
   mode,
   decimals,
+  splitAmount,
 }: {
   raw: string;
   mode: Mode;
   decimals?: number;
+  splitAmount?: string;
 }): {
   recipients: Address[];
   amounts: bigint[];
@@ -220,6 +248,8 @@ function parseRecipients({
   // hasn't been provided / fetched), we still want to validate *addresses* and basic amount
   // formatting without marking lines as invalid due to missing decimals.
   const tokenDecimalsReady = mode === "ETH" || decimals !== undefined;
+	const split = (splitAmount ?? "").trim();
+	const hasSplit = split.length > 0;
   const looksLikeNumber = (s: string) => /^\d+(?:\.\d+)?$/.test(s);
   const isNonZeroDecimal = (s: string) => {
     // Treat "0", "0.0", "0.00" as zero.
@@ -228,6 +258,10 @@ function parseRecipients({
     return /[1-9]/.test(cleaned.replace(".", ""));
   };
 
+	if (hasSplit && (!looksLikeNumber(split) || !isNonZeroDecimal(split))) {
+		return { recipients, amounts, total, invalidLine: `Split amount: ${split}` };
+	}
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -235,13 +269,13 @@ function parseRecipients({
     // allow comma or whitespace separators
     const parts = trimmed.includes(",") ? trimmed.split(",") : trimmed.split(/\s+/);
     const addrRaw = (parts[0] || "").trim();
-    const amtRaw = (parts[1] || "").trim();
+		const amtRaw = hasSplit ? split : (parts[1] || "").trim();
 
     if (!isAddress(addrRaw)) return { recipients, amounts, total, invalidLine: trimmed };
-    if (!amtRaw) return { recipients, amounts, total, invalidLine: trimmed };
+		if (!amtRaw) return { recipients, amounts, total, invalidLine: trimmed };
 
     // Validate amount format even before token decimals are available.
-    if (!looksLikeNumber(amtRaw) || !isNonZeroDecimal(amtRaw)) {
+		if (!looksLikeNumber(amtRaw) || !isNonZeroDecimal(amtRaw)) {
       return { recipients, amounts, total, invalidLine: trimmed };
     }
 
@@ -317,9 +351,11 @@ export default function Home() {
   useEffect(() => setMounted(true), []);
 
   const [mode, setMode] = useState<Mode>("ETH");
+	const isMiniApp = useIsMiniApp();
 
   // Recipients editor
   const [rawList, setRawList] = useState("");
+	const [splitAmountInput, setSplitAmountInput] = useState("");
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const numsRef = useRef<HTMLDivElement | null>(null);
@@ -444,7 +480,10 @@ export default function Home() {
   const decimals = tokenDecimalsRead.data !== undefined ? Number(tokenDecimalsRead.data) : undefined;
   const symbol = tokenSymbolRead.data || "";
 
-  const parsed = useMemo(() => parseRecipients({ raw: rawList, mode, decimals }), [rawList, mode, decimals]);
+	const parsed = useMemo(
+		() => parseRecipients({ raw: rawList, mode, decimals, splitAmount: splitAmountInput }),
+		[rawList, mode, decimals, splitAmountInput]
+	);
   const recipients = parsed.recipients;
   const amounts = parsed.amounts;
   const total = parsed.total;
@@ -1037,6 +1076,28 @@ export default function Home() {
 
   const editorHeight = `${viewportLines * lineHeightPx}px`;
 
+	async function shareFromMiniApp() {
+		// Only used when running inside a Mini App host.
+		try {
+			await sdk.actions.composeCast({ text: SHARE_TEXT, embeds: [APP_URL] as [string] });
+			return;
+		} catch {
+			// Fallbacks below.
+		}
+
+		try {
+			if (typeof navigator !== "undefined" && "share" in navigator) {
+				// @ts-expect-error - TS libdom may not include navigator.share in some configs
+				await navigator.share({ text: SHARE_TEXT, url: APP_URL });
+				return;
+			}
+		} catch {
+			// ignore
+		}
+
+		await copyToClipboard(`${SHARE_TEXT} ${APP_URL}`);
+	}
+
   if (!mounted) {
     // Avoid hydration flicker / mismatches by rendering a stable placeholder on first paint.
     return (
@@ -1233,12 +1294,35 @@ export default function Home() {
                     </div>
                   </div>
 
+	                  <div className="flex flex-wrap items-center justify-between gap-2">
+	                    <div className="text-xs text-white/45">
+	                      Split amount (optional)
+	                    </div>
+	                    <div className="flex items-center gap-2 w-full sm:w-auto">
+	                      <Input
+	                        value={splitAmountInput}
+	                        inputMode="decimal"
+	                        placeholder={mode === "ETH" ? "0.01" : "0.10"}
+	                        className="h-8 w-full sm:w-32"
+	                        onChange={(e) => {
+	                          setSplitAmountInput(e.target.value);
+	                          setReceipts([]);
+	                          setSendProgress(null);
+	                          setStatus(null);
+	                        }}
+	                      />
+	                      <span className="text-xs text-white/45 whitespace-nowrap">
+	                        {mode === "ETH" ? "ETH" : symbol || "TOKEN"}
+	                      </span>
+	                    </div>
+	                  </div>
+
                   <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-white/[0.02]">
                     <div className="flex min-w-0">
-                      <div
-                        ref={numsRef}
-                        aria-hidden
-                        className="select-none overflow-y-auto scrollbar-none border-r border-white/10 bg-white/[0.02] px-3 py-2 text-right font-mono text-sm leading-6 text-white/35"
+	                      <div
+	                        ref={numsRef}
+	                        aria-hidden
+	                        className="select-none overflow-y-auto scrollbar-none border-r border-white/10 bg-white/[0.02] px-3 py-2 text-right font-mono text-sm text-white/35"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1255,8 +1339,8 @@ export default function Home() {
                         }}
                         style={{ height: editorHeight }}
                       >
-                        {Array.from({ length: lineCount }, (_, i) => (
-                          <div key={i} className="h-6 leading-6">
+	                        {Array.from({ length: lineCount }, (_, i) => (
+	                          <div key={i} style={{ height: lineHeightPx, lineHeight: `${lineHeightPx}px` }}>
                             {i + 1}
                           </div>
                         ))}
@@ -1268,7 +1352,7 @@ export default function Home() {
                         onChange={(e) => {
                           setRawList(e.target.value);
                           setReceipts([]);
-    setSendProgress(null);
+	                          setSendProgress(null);
                           setStatus(null);
                         }}
                         onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
@@ -1436,6 +1520,17 @@ export default function Home() {
                       >
                         {copied === "contract" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
+	                      {isMiniApp ? (
+	                        <Button
+	                          type="button"
+	                          variant="outline"
+	                          aria-label="Share"
+	                          className="h-8 w-8 p-0 rounded-xl"
+	                          onClick={() => void shareFromMiniApp()}
+	                        >
+	                          <Share2 className="h-4 w-4" />
+	                        </Button>
+	                      ) : null}
                     </div>
 
                     {mode === "ERC20" && (
