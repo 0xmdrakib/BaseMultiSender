@@ -448,11 +448,18 @@ export default function Home() {
   // Fee estimate (ETH is accurate pre-tx; ERC20 is shown right before send)
   const [feeWei, setFeeWei] = useState<bigint | undefined>(undefined);
   const [feeLoading, setFeeLoading] = useState(false);
-
   // Visible editor sizing
+  // Mobile webviews (especially Mini Apps) can apply text autosizing or font scaling.
+  // To keep line numbers and textarea lines perfectly aligned, lock the editor's
+  // font-size, line-height, and padding in px (not rem).
   const visibleLines = 10;
   const expandedLines = 18;
+
+  const editorFontSizePx = 16;
   const lineHeightPx = 24;
+  const editorPaddingXPx = 12; // matches Tailwind px-3 (3 * 4px)
+  const editorPaddingYPx = 8;  // matches Tailwind py-2 (2 * 4px)
+
   const viewportLines = expanded ? expandedLines : visibleLines;
 
   const lineCount = useMemo(() => {
@@ -1068,7 +1075,7 @@ export default function Home() {
     recipients.length > 0 &&
     (mode === "ETH" ? total > 0n : !!tokenAddress && decimals !== undefined && total > 0n && !needsApprove);
 
-  const editorHeight = `${viewportLines * lineHeightPx}px`;
+  const editorHeight = `${viewportLines * lineHeightPx + editorPaddingYPx * 2}px`;
 
 	async function shareFromMiniApp() {
 		// Only used when running inside a Mini App host.
@@ -1318,7 +1325,7 @@ export default function Home() {
 	                      <div
 	                        ref={numsRef}
 	                        aria-hidden
-	                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.02] text-right font-mono text-base sm:text-sm text-white/35"
+	                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.02] text-right font-mono text-white/35"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1331,9 +1338,9 @@ export default function Home() {
                           // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
-                        style={{ height: editorHeight }}
+                        style={{ height: editorHeight, fontSize: editorFontSizePx, WebkitTextSizeAdjust: "100%", textSizeAdjust: "100%" }}
 	                      >
-                        <div className="h-full overflow-hidden px-3 py-2">
+                        <div className="h-full overflow-hidden" style={{ padding: `${editorPaddingYPx}px ${editorPaddingXPx}px` }}>
                           <div
                             style={{
                               transform: `translateY(-${editorScrollTop}px)`,
@@ -1366,13 +1373,10 @@ export default function Home() {
                         className={[
                           // Disable line-wrapping so each logical line remains one visual line.
                           // This keeps line numbers perfectly aligned with each address line.
-                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-base sm:text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
+                          "w-full min-w-0 resize-none bg-transparent font-mono text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
                           "overflow-y-auto",
                         ].join(" ")}
-                        style={{
-                          height: editorHeight,
-                          lineHeight: `${lineHeightPx}px`,
-                        }}
+                        style={{ height: editorHeight, lineHeight: `${lineHeightPx}px`, fontSize: editorFontSizePx, padding: `${editorPaddingYPx}px ${editorPaddingXPx}px`, WebkitTextSizeAdjust: "100%", textSizeAdjust: "100%" }}
                       />
                     </div>
                   </div>
