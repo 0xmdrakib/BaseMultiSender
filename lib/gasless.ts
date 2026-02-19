@@ -194,26 +194,56 @@ export async function sendSponsoredCalls(params: {
   while (Date.now() - started < timeoutMs) {
     const status = await request({ method: "wallet_getCallsStatus", params: [id] });
 
-    const state = String(status?.status ?? "").toUpperCase();
-    if (state === "CONFIRMED") {
-      const receipts = status?.receipts ?? [];
-      const first = receipts?.[0];
-      const hash: Hex | undefined =
-        first?.transactionHash ??
-        first?.transactionReceipt?.transactionHash ??
-        status?.transactionHash;
+    const rawStatus = status?.status;
+    const statusStr = typeof rawStatus === "string" ? rawStatus.toUpperCase() : "";
 
-      if (!hash) throw new Error("Sponsored call confirmed, but no transactionHash was returned.");
+    // EIP-5792 defines numeric status codes (100 pending, 200 confirmed, 4xx/5xx/6xx failures).
+    // Some wallets may still return string enums, so we support both.
+    let statusCode: number | undefined;
+    if (typeof rawStatus === "number") statusCode = rawStatus;
+    else if (typeof rawStatus === "string") {
+      const t = rawStatus.trim();
+      if (/^0x[0-9a-fA-F]+$/.test(t)) statusCode = parseInt(t, 16);
+      else if (/^[0-9]+$/.test(t)) statusCode = parseInt(t, 10);
+    }
+
+    const receipts = status?.receipts ?? [];
+    const first = receipts?.[0];
+    const hash: Hex | undefined =
+      first?.transactionHash ??
+      first?.transactionReceipt?.transactionHash ??
+      status?.transactionHash;
+
+    const isConfirmed =
+      (typeof statusCode === "number" && statusCode >= 200 && statusCode < 300) ||
+      statusStr === "CONFIRMED";
+
+    const isFailed =
+      (typeof statusCode === "number" && statusCode >= 400) ||
+      statusStr === "FAILED" ||
+      statusStr === "REVERTED" ||
+      statusStr === "ERROR";
+
+    // If we already have a transaction hash, prefer returning it as soon as we can.
+    // Some implementations may populate receipts/txHash before flipping the status code.
+    if (hash && (isConfirmed || (typeof statusCode === "number" && statusCode >= 200))) {
       return hash as Hex;
     }
 
-    if (state === "FAILED") {
-      const reason = status?.error?.message ? String(status.error.message) : "Sponsored call failed.";
-      throw new Error(reason);
+    if (isConfirmed) {
+      throw new Error("Sponsored call confirmed, but no transactionHash was returned.");
+    }
+
+    if (isFailed) {
+      const reason =
+        status?.error?.message
+          ? String(status.error.message)
+          : `Sponsored call failed (status: ${String(rawStatus ?? "unknown")}).`;
+      // Include tx hash if available to help users locate the onchain tx even on failures.
+      throw new Error(hash ? `${reason} Tx: ${hash}` : reason);
     }
 
     await new Promise((r) => setTimeout(r, pollIntervalMs));
-  }
 
   throw new Error("Timed out waiting for sponsored transaction confirmation.");
 }
