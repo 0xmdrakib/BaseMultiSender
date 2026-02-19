@@ -462,6 +462,12 @@ export default function Home() {
     return Array.from({ length: lineCount }, (_, i) => String(i + 1)).join('\n');
   }, [lineCount]);
 
+
+  const lineNumberDigits = useMemo(() => Math.max(2, String(lineCount).length), [lineCount]);
+  // Gutter width adapts to the largest line number so it doesn’t waste space on mobile.
+  // 24px matches px-3 left+right padding on the line-number textarea.
+  const lineNumberGutterWidth = useMemo(() => `calc(${lineNumberDigits}ch + 24px)`, [lineNumberDigits]);
+
   const syncLineNumbersScroll = () => {
     const ta = textareaRef.current;
     const ln = lineNumsTextareaRef.current;
@@ -1320,7 +1326,7 @@ export default function Home() {
                     <div className="flex min-w-0">
                       <div
                         aria-hidden
-                        className="flex-shrink-0 w-16 select-none overflow-hidden border-r border-white/10 bg-white/[0.02]"
+                        className="flex-shrink-0 select-none overflow-hidden border-r border-white/10 bg-white/[0.02]"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1333,7 +1339,7 @@ export default function Home() {
                           // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
-                        style={{ height: editorHeight }}
+                        style={{ height: editorHeight, width: lineNumberGutterWidth }}
                       >
                         <textarea
                           ref={lineNumsTextareaRef}
