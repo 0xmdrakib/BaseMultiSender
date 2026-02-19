@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useSendTransaction, useSignTypedData, useWalletClient, useWriteContract } from "wagmi";
 import { base } from "wagmi/chains";
 import {
@@ -358,34 +358,7 @@ export default function Home() {
 	const [splitAmountInput, setSplitAmountInput] = useState("");
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const numsInnerRef = useRef<HTMLDivElement>(null);
-  const scrollRafRef = useRef<number | null>(null);
-
-  const syncLineNumbersToTextarea = () => {
-    const ta = textareaRef.current;
-    const inner = numsInnerRef.current;
-    if (!ta || !inner) return;
-
-    // Use the *actual* scrollTop (can be fractional on mobile).
-    inner.style.transform = `translateY(-${ta.scrollTop}px)`;
-  };
-
-  const scheduleSyncLineNumbers = () => {
-    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRafRef.current = null;
-      syncLineNumbersToTextarea();
-    });
-  };
-
-  useLayoutEffect(() => {
-    // Sync after render/layout updates (rawList changes, expand/collapse, etc.)
-    scheduleSyncLineNumbers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawList, expanded]);
-
-  const numsRef = useRef<HTMLDivElement | null>(null);
-  // Line numbers container (kept scroll-synced with the textarea)
+  const lineNumsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const [copied, setCopied] = useState<null | "contract" | "tx">(null);
@@ -472,18 +445,11 @@ export default function Home() {
   // Fee estimate (ETH is accurate pre-tx; ERC20 is shown right before send)
   const [feeWei, setFeeWei] = useState<bigint | undefined>(undefined);
   const [feeLoading, setFeeLoading] = useState(false);
+
   // Visible editor sizing
-  // Mobile webviews (especially Mini Apps) can apply text autosizing or font scaling.
-  // To keep line numbers and textarea lines perfectly aligned, lock the editor's
-  // font-size, line-height, and padding in px (not rem).
   const visibleLines = 10;
   const expandedLines = 18;
-
-  const editorFontSizePx = 16;
   const lineHeightPx = 24;
-  const editorPaddingXPx = 12; // matches Tailwind px-3 (3 * 4px)
-  const editorPaddingYPx = 8;  // matches Tailwind py-2 (2 * 4px)
-
   const viewportLines = expanded ? expandedLines : visibleLines;
 
   const lineCount = useMemo(() => {
@@ -491,6 +457,18 @@ export default function Home() {
     // count at least viewportLines so the editor looks stable
     return Math.max(viewportLines, lines.length || viewportLines);
   }, [rawList, viewportLines]);
+
+  const lineNumbersText = useMemo(() => {
+    return Array.from({ length: lineCount }, (_, i) => String(i + 1)).join('\n');
+  }, [lineCount]);
+
+  const syncLineNumbersScroll = () => {
+    const ta = textareaRef.current;
+    const ln = lineNumsTextareaRef.current;
+    if (!ta || !ln) return;
+    ln.scrollTop = ta.scrollTop;
+  };
+
 
   // Keep line numbers perfectly in sync with the textarea scroll.
 
@@ -519,16 +497,10 @@ export default function Home() {
   const amounts = parsed.amounts;
   const total = parsed.total;
   const invalidLine = parsed.invalidLine;
-
   useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    scheduleSyncLineNumbers();
+    // Keep the line-number textarea aligned with the main textarea after layout changes.
+    syncLineNumbersScroll();
   }, [expanded, rawList]);
-
-  // Line numbers are rendered in a non-scrolling column (we translate the list
-  // by textarea.scrollTop). This avoids drift on mobile webviews where textarea
-  // scrollHeight/rounding can differ from a mirrored scroller.
 
   // Token allowance to Permit2 (on the token contract)
   const tokenAllowanceToPermit2 = useReadContract({
@@ -1099,7 +1071,7 @@ export default function Home() {
     recipients.length > 0 &&
     (mode === "ETH" ? total > 0n : !!tokenAddress && decimals !== undefined && total > 0n && !needsApprove);
 
-  const editorHeight = `${viewportLines * lineHeightPx + editorPaddingYPx * 2}px`;
+  const editorHeight = `${viewportLines * lineHeightPx}px`;
 
 	async function shareFromMiniApp() {
 		// Only used when running inside a Mini App host.
@@ -1346,10 +1318,9 @@ export default function Home() {
 
                   <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-white/[0.02]">
                     <div className="flex min-w-0">
-	                      <div
-	                        ref={numsRef}
-	                        aria-hidden
-	                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.02] text-right font-mono text-white/35"
+                      <div
+                        aria-hidden
+                        className="flex-shrink-0 w-16 select-none overflow-hidden border-r border-white/10 bg-white/[0.02]"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1357,28 +1328,28 @@ export default function Home() {
                           // Scroll the textarea (single source of truth).
                           const prev = ta.scrollTop;
                           ta.scrollTop += e.deltaY;
-                          scheduleSyncLineNumbers();
+                          syncLineNumbersScroll();
 
                           // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
-                        style={{ height: editorHeight, fontSize: editorFontSizePx, WebkitTextSizeAdjust: "none", textSizeAdjust: "none" }}
-	                      >
-                        <div className="h-full overflow-hidden" style={{ padding: `${editorPaddingYPx}px ${editorPaddingXPx}px` }}>
-                          <div
-                            ref={numsInnerRef}
-                            style={{
-                              transform: `translateY(0px)`,
-                              willChange: "transform",
-                            }}
-                          >
-	                          {Array.from({ length: lineCount }, (_, i) => (
-	                            <div key={i} style={{ height: lineHeightPx, lineHeight: `${lineHeightPx}px` }}>
-                              {i + 1}
-                            </div>
-                          ))}
-                          </div>
-                        </div>
+                        style={{ height: editorHeight }}
+                      >
+                        <textarea
+                          ref={lineNumsTextareaRef}
+                          aria-hidden
+                          tabIndex={-1}
+                          readOnly
+                          value={lineNumbersText}
+                          spellCheck={false}
+                          wrap="off"
+                          className="h-full w-full resize-none bg-transparent px-3 py-2 font-mono text-base sm:text-sm text-white/35 text-right outline-none overflow-y-scroll scrollbar-none pointer-events-none"
+                          style={{
+                            lineHeight: `${lineHeightPx}px`,
+                            WebkitTextSizeAdjust: "none",
+                            textSizeAdjust: "none",
+                          }}
+                        />
                       </div>
 
                       <textarea
@@ -1387,11 +1358,14 @@ export default function Home() {
                         onChange={(e) => {
                           setRawList(e.target.value);
                           setReceipts([]);
-                          scheduleSyncLineNumbers();
 	                          setSendProgress(null);
                           setStatus(null);
                         }}
-                        onScroll={() => scheduleSyncLineNumbers()}
+                        onScroll={(e) => {
+                          const top = e.currentTarget.scrollTop;
+                          const ln = lineNumsTextareaRef.current;
+                          if (ln) ln.scrollTop = top;
+                        }}
                         placeholder={`0x1111...1111,0.01
 0x2222...2222,0.02`}
                         spellCheck={false}
@@ -1399,10 +1373,15 @@ export default function Home() {
                         className={[
                           // Disable line-wrapping so each logical line remains one visual line.
                           // This keeps line numbers perfectly aligned with each address line.
-                          "w-full min-w-0 resize-none bg-transparent font-mono text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
+                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-base sm:text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
                           "overflow-y-auto",
                         ].join(" ")}
-                        style={{ height: editorHeight, lineHeight: `${lineHeightPx}px`, fontSize: editorFontSizePx, padding: `${editorPaddingYPx}px ${editorPaddingXPx}px`, WebkitTextSizeAdjust: "none", textSizeAdjust: "none" }}
+                        style={{
+                          height: editorHeight,
+                          lineHeight: `${lineHeightPx}px`,
+                          WebkitTextSizeAdjust: "none",
+                          textSizeAdjust: "none",
+                        }}
                       />
                     </div>
                   </div>
