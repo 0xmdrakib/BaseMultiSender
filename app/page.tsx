@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useSendTransaction, useSignTypedData, useWalletClient, useWriteContract } from "wagmi";
 import { base } from "wagmi/chains";
 import {
@@ -358,11 +358,35 @@ export default function Home() {
 	const [splitAmountInput, setSplitAmountInput] = useState("");
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const numsInnerRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+
+  const syncLineNumbersToTextarea = () => {
+    const ta = textareaRef.current;
+    const inner = numsInnerRef.current;
+    if (!ta || !inner) return;
+
+    // Use the *actual* scrollTop (can be fractional on mobile).
+    inner.style.transform = `translateY(-${ta.scrollTop}px)`;
+  };
+
+  const scheduleSyncLineNumbers = () => {
+    if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      syncLineNumbersToTextarea();
+    });
+  };
+
+  useLayoutEffect(() => {
+    // Sync after render/layout updates (rawList changes, expand/collapse, etc.)
+    scheduleSyncLineNumbers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawList, expanded]);
+
   const numsRef = useRef<HTMLDivElement | null>(null);
   // Line numbers container (kept scroll-synced with the textarea)
   const csvInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [editorScrollTop, setEditorScrollTop] = useState(0);
 
   const [copied, setCopied] = useState<null | "contract" | "tx">(null);
 
@@ -499,7 +523,7 @@ export default function Home() {
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    setEditorScrollTop(ta.scrollTop);
+    scheduleSyncLineNumbers();
   }, [expanded, rawList]);
 
   // Line numbers are rendered in a non-scrolling column (we translate the list
@@ -1333,17 +1357,18 @@ export default function Home() {
                           // Scroll the textarea (single source of truth).
                           const prev = ta.scrollTop;
                           ta.scrollTop += e.deltaY;
-                          setEditorScrollTop(ta.scrollTop);
+                          scheduleSyncLineNumbers();
 
                           // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
-                        style={{ height: editorHeight, fontSize: editorFontSizePx, WebkitTextSizeAdjust: "100%", textSizeAdjust: "100%" }}
+                        style={{ height: editorHeight, fontSize: editorFontSizePx, WebkitTextSizeAdjust: "none", textSizeAdjust: "none" }}
 	                      >
                         <div className="h-full overflow-hidden" style={{ padding: `${editorPaddingYPx}px ${editorPaddingXPx}px` }}>
                           <div
+                            ref={numsInnerRef}
                             style={{
-                              transform: `translateY(-${editorScrollTop}px)`,
+                              transform: `translateY(0px)`,
                               willChange: "transform",
                             }}
                           >
@@ -1362,10 +1387,11 @@ export default function Home() {
                         onChange={(e) => {
                           setRawList(e.target.value);
                           setReceipts([]);
+                          scheduleSyncLineNumbers();
 	                          setSendProgress(null);
                           setStatus(null);
                         }}
-                        onScroll={(e) => setEditorScrollTop(e.currentTarget.scrollTop)}
+                        onScroll={() => scheduleSyncLineNumbers()}
                         placeholder={`0x1111...1111,0.01
 0x2222...2222,0.02`}
                         spellCheck={false}
@@ -1376,7 +1402,7 @@ export default function Home() {
                           "w-full min-w-0 resize-none bg-transparent font-mono text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
                           "overflow-y-auto",
                         ].join(" ")}
-                        style={{ height: editorHeight, lineHeight: `${lineHeightPx}px`, fontSize: editorFontSizePx, padding: `${editorPaddingYPx}px ${editorPaddingXPx}px`, WebkitTextSizeAdjust: "100%", textSizeAdjust: "100%" }}
+                        style={{ height: editorHeight, lineHeight: `${lineHeightPx}px`, fontSize: editorFontSizePx, padding: `${editorPaddingYPx}px ${editorPaddingXPx}px`, WebkitTextSizeAdjust: "none", textSizeAdjust: "none" }}
                       />
                     </div>
                   </div>
