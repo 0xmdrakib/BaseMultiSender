@@ -1,13 +1,8 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import { Providers } from "./providers";
 import { MiniAppReady } from "./miniapp-ready";
-
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-};
 
 const APP_URL = "https://multisender.online";
 const BASE_APP_ID = "6984b4b77a0334031d134545";
