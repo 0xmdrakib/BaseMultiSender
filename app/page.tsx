@@ -495,15 +495,9 @@ export default function Home() {
     setEditorScrollTop(ta.scrollTop);
   }, [expanded, rawList]);
 
-  // Keep the line numbers scroller perfectly locked to the textarea.
-  // Using scrollTop sync (instead of translateY) avoids edge-case drift near
-  // the bottom caused by textarea padding / scrollHeight differences.
-  useEffect(() => {
-    const ta = textareaRef.current;
-    const nums = numsRef.current;
-    if (!ta || !nums) return;
-    nums.scrollTop = ta.scrollTop;
-  }, [editorScrollTop, expanded, rawList]);
+  // Line numbers are rendered in a non-scrolling column (we translate the list
+  // by textarea.scrollTop). This avoids drift on mobile webviews where textarea
+  // scrollHeight/rounding can differ from a mirrored scroller.
 
   // Token allowance to Permit2 (on the token contract)
   const tokenAllowanceToPermit2 = useReadContract({
@@ -1324,7 +1318,7 @@ export default function Home() {
 	                      <div
 	                        ref={numsRef}
 	                        aria-hidden
-	                        className="select-none overflow-y-auto scrollbar-none border-r border-white/10 bg-white/[0.02] px-3 py-2 text-right font-mono text-sm text-white/35"
+	                        className="select-none overflow-hidden border-r border-white/10 bg-white/[0.02] text-right font-mono text-base sm:text-sm text-white/35"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1333,19 +1327,26 @@ export default function Home() {
                           const prev = ta.scrollTop;
                           ta.scrollTop += e.deltaY;
                           setEditorScrollTop(ta.scrollTop);
-                          const nums = numsRef.current;
-                          if (nums) nums.scrollTop = ta.scrollTop;
 
                           // Prevent the page from scrolling if the editor can still scroll.
                           if (ta.scrollTop !== prev) e.preventDefault();
                         }}
                         style={{ height: editorHeight }}
-                      >
-	                        {Array.from({ length: lineCount }, (_, i) => (
-	                          <div key={i} style={{ height: lineHeightPx, lineHeight: `${lineHeightPx}px` }}>
-                            {i + 1}
+	                      >
+                        <div className="h-full overflow-hidden px-3 py-2">
+                          <div
+                            style={{
+                              transform: `translateY(-${editorScrollTop}px)`,
+                              willChange: "transform",
+                            }}
+                          >
+	                          {Array.from({ length: lineCount }, (_, i) => (
+	                            <div key={i} style={{ height: lineHeightPx, lineHeight: `${lineHeightPx}px` }}>
+                              {i + 1}
+                            </div>
+                          ))}
                           </div>
-                        ))}
+                        </div>
                       </div>
 
                       <textarea
@@ -1365,7 +1366,7 @@ export default function Home() {
                         className={[
                           // Disable line-wrapping so each logical line remains one visual line.
                           // This keeps line numbers perfectly aligned with each address line.
-                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
+                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-base sm:text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
                           "overflow-y-auto",
                         ].join(" ")}
                         style={{
