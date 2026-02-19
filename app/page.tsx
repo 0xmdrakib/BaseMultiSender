@@ -1086,11 +1086,13 @@ export default function Home() {
 		}
 
 		try {
-			if (typeof navigator !== "undefined" && "share" in navigator) {
-				// @ts-expect-error - TS libdom may not include navigator.share in some configs
-				await navigator.share({ text: SHARE_TEXT, url: APP_URL });
-				return;
-			}
+				if (typeof navigator !== "undefined" && "share" in navigator) {
+					const nav = navigator as Navigator & { share?: (data: any) => Promise<void> };
+					if (typeof nav.share === "function") {
+						await nav.share({ text: SHARE_TEXT, url: APP_URL });
+						return;
+					}
+				}
 		} catch {
 			// ignore
 		}
