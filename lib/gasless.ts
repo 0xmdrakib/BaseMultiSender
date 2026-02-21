@@ -1,5 +1,7 @@
 import type { Address, Hex } from "viem";
 
+import { appendBuilderCodesToCalldata } from "./builderCodes";
+
 type RpcRequester = (args: { method: string; params?: unknown[] }) => Promise<any>;
 
 function toHexChainId(chainId: number): Hex {
@@ -173,9 +175,15 @@ export async function sendSponsoredCalls(params: {
 
   const chainIdHex = toHexChainId(chainId);
 
+  // Append ERC-8021 attribution suffix (Builder Codes) to each call's calldata.
+  const callsWithSuffix = calls.map((c) => ({
+    ...c,
+    data: appendBuilderCodesToCalldata(c.data) as Hex,
+  }));
+
   let id: string;
   try {
-    id = await walletSendCalls({ request, address, chainIdHex, paymasterProxyUrl, calls, version: "2.0.0" });
+    id = await walletSendCalls({ request, address, chainIdHex, paymasterProxyUrl, calls: callsWithSuffix, version: "2.0.0" });
   } catch (e) {
     // If the user cancels/rejects the wallet confirmation, DO NOT retry (otherwise they see a 2nd prompt).
     if (isUserRejected(e)) throw e;
@@ -184,7 +192,7 @@ export async function sendSponsoredCalls(params: {
 
     // Some wallets may only support an older draft; retry once only if the error clearly indicates version mismatch.
     if (looksLikeVersionIssue(e)) {
-      id = await walletSendCalls({ request, address, chainIdHex, paymasterProxyUrl, calls, version: "1.0" });
+      id = await walletSendCalls({ request, address, chainIdHex, paymasterProxyUrl, calls: callsWithSuffix, version: "1.0" });
     } else {
       throw e;
     }
