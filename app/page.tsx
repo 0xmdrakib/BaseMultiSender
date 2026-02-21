@@ -12,6 +12,7 @@ import {
   parseEther,
   parseUnits,
   type Address,
+  type Hex,
 } from "viem";
 import { publicActionsL2 } from "viem/op-stack";
 import { AllowanceTransfer } from "@uniswap/permit2-sdk";
@@ -19,6 +20,7 @@ import Papa from "papaparse";
 import { sdk } from "@farcaster/miniapp-sdk";
 
 import { getRpcRequester, sendSponsoredCalls, supportsPaymasterService } from "@/lib/gasless";
+import { appendBuilderCodesToCalldata, isBuilderCodesEnabled } from "@/lib/builderCodes";
 
 
 import { Button } from "@/components/ui/button";
@@ -68,6 +70,8 @@ const PERMIT2_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ?? ""
   : (DEFAULT_PERMIT2_ADDRESS as Address));
 
 const PAYMASTER_PROXY_URL = process.env.NEXT_PUBLIC_PAYMASTER_PROXY_SERVER_URL ?? "";
+
+const BUILDER_CODES_ENABLED = isBuilderCodesEnabled();
 
 // Optional: tip recipient address (your wallet). If not set, the UI will prompt you to configure it.
 const TIP_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_TIP_ADDRESS ?? "")
@@ -567,10 +571,11 @@ export default function Home() {
             functionName: "sendETH",
             args: [recipients, amounts],
           });
+          const dataWithSuffix = appendBuilderCodesToCalldata(data) as Hex;
           // viem/op-stack will do the correct L1-fee estimation on OP Stack chains.
           // estimateL1Fee does NOT take `gas` or legacy `gasPrice` (it only needs account/to/data/value,
           // plus optional EIP-1559 fields). Passing `gas`/`gasPrice` breaks typechecking in CI builds.
-          l1Fee = await l2.estimateL1Fee({ account: address, to: MULTISENDER_ADDRESS, data, value: total });
+          l1Fee = await l2.estimateL1Fee({ account: address, to: MULTISENDER_ADDRESS, data: dataWithSuffix, value: total });
         } catch {
           // If extension isn't available, we still show L2 fee (still a useful approximation).
           l1Fee = 0n;
@@ -679,6 +684,7 @@ export default function Home() {
         to: TIP_ADDRESS,
         value,
         chainId: base.id,
+        ...(BUILDER_CODES_ENABLED ? { data: (appendBuilderCodesToCalldata("0x" as Hex) as Hex) } : {}),
       });
 
       setTipTxHash(hash);
@@ -760,12 +766,24 @@ export default function Home() {
 
     try {
       // Most tokens support updating allowance directly.
-      const hash = await writeContractAsync({
-        address: tokenAddress,
+      const approveData = encodeFunctionData({
         abi: erc20Abi,
         functionName: "approve",
         args: [PERMIT2_ADDRESS, total],
       });
+
+      const hash = BUILDER_CODES_ENABLED
+        ? await sendTransactionAsync({
+            to: tokenAddress,
+            data: appendBuilderCodesToCalldata(approveData) as Hex,
+            chainId: base.id,
+          })
+        : await writeContractAsync({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [PERMIT2_ADDRESS, total],
+          });
 
       await wait(hash, "Approval submitted. Waiting for confirmation…");
 
@@ -782,21 +800,45 @@ export default function Home() {
         try {
           setStatus("Approval failed (token requires reset). Resetting to 0…");
 
-          const resetHash = await writeContractAsync({
-            address: tokenAddress,
+          const resetData = encodeFunctionData({
             abi: erc20Abi,
             functionName: "approve",
             args: [PERMIT2_ADDRESS, 0n],
           });
 
+          const resetHash = BUILDER_CODES_ENABLED
+            ? await sendTransactionAsync({
+                to: tokenAddress,
+                data: appendBuilderCodesToCalldata(resetData) as Hex,
+                chainId: base.id,
+              })
+            : await writeContractAsync({
+                address: tokenAddress,
+                abi: erc20Abi,
+                functionName: "approve",
+                args: [PERMIT2_ADDRESS, 0n],
+              });
+
           await wait(resetHash, "Reset submitted. Waiting for confirmation…");
 
-          const hash2 = await writeContractAsync({
-            address: tokenAddress,
+          const approve2Data = encodeFunctionData({
             abi: erc20Abi,
             functionName: "approve",
             args: [PERMIT2_ADDRESS, total],
           });
+
+          const hash2 = BUILDER_CODES_ENABLED
+            ? await sendTransactionAsync({
+                to: tokenAddress,
+                data: appendBuilderCodesToCalldata(approve2Data) as Hex,
+                chainId: base.id,
+              })
+            : await writeContractAsync({
+                address: tokenAddress,
+                abi: erc20Abi,
+                functionName: "approve",
+                args: [PERMIT2_ADDRESS, total],
+              });
 
           await wait(hash2, "Approval submitted. Waiting for confirmation…");
 
@@ -855,6 +897,12 @@ export default function Home() {
             : "Confirm in your wallet…"
         );
 
+        const sendEthData = encodeFunctionData({
+          abi: multisenderAbi,
+          functionName: "sendETH",
+          args: [batchRecipients, batchAmounts],
+        });
+
         const hash = canSponsor
           ? await sendSponsoredCalls({
               request: rpcRequest!,
@@ -864,22 +912,25 @@ export default function Home() {
               calls: [
                 {
                   to: MULTISENDER_ADDRESS,
-                  data: encodeFunctionData({
-                    abi: multisenderAbi,
-                    functionName: "sendETH",
-                    args: [batchRecipients, batchAmounts],
-                  }),
+                  data: sendEthData,
                   value: batchTotal,
                 },
               ],
             })
-          : await writeContractAsync({
-              address: MULTISENDER_ADDRESS,
-              abi: multisenderAbi,
-              functionName: "sendETH",
-              args: [batchRecipients, batchAmounts],
-              value: batchTotal,
-            });
+          : BUILDER_CODES_ENABLED
+            ? await sendTransactionAsync({
+                to: MULTISENDER_ADDRESS,
+                data: appendBuilderCodesToCalldata(sendEthData) as Hex,
+                value: batchTotal,
+                chainId: base.id,
+              })
+            : await writeContractAsync({
+                address: MULTISENDER_ADDRESS,
+                abi: multisenderAbi,
+                functionName: "sendETH",
+                args: [batchRecipients, batchAmounts],
+                value: batchTotal,
+              });
 
         setStatus(
           parts > 1
@@ -997,6 +1048,12 @@ export default function Home() {
             : "Confirm transaction…"
         );
 
+        const sendTokenData = encodeFunctionData({
+          abi: multisenderAbi,
+          functionName: "sendERC20Permit2",
+          args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
+        });
+
         const hash = canSponsor
           ? await sendSponsoredCalls({
               request: rpcRequest!,
@@ -1006,20 +1063,22 @@ export default function Home() {
               calls: [
                 {
                   to: MULTISENDER_ADDRESS,
-                  data: encodeFunctionData({
-                    abi: multisenderAbi,
-                    functionName: "sendERC20Permit2",
-                    args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
-                  }),
+                  data: sendTokenData,
                 },
               ],
             })
-          : await writeContractAsync({
-              address: MULTISENDER_ADDRESS,
-              abi: multisenderAbi,
-              functionName: "sendERC20Permit2",
-              args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
-            });
+          : BUILDER_CODES_ENABLED
+            ? await sendTransactionAsync({
+                to: MULTISENDER_ADDRESS,
+                data: appendBuilderCodesToCalldata(sendTokenData) as Hex,
+                chainId: base.id,
+              })
+            : await writeContractAsync({
+                address: MULTISENDER_ADDRESS,
+                abi: multisenderAbi,
+                functionName: "sendERC20Permit2",
+                args: [permitSingle as any, signature as any, batchRecipients, batchAmounts],
+              });
 
         setStatus(
           parts > 1
