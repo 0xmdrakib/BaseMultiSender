@@ -1717,7 +1717,7 @@ export default function Home() {
           </div>
 
           <footer className="mt-10 text-center text-xs text-white/40">
-            © 2026 Md. Rakib • made with love and passion • All Rights Reserved.
+            © 2026 Md. Rakib • made with love and passion.
           </footer>
         </div>
       </main>
