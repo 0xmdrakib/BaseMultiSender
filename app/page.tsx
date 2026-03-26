@@ -716,8 +716,11 @@ export default function Home() {
       .map((row) => row.map((c) => String(c ?? "").trim()));
 
     const firstRow = rows[0] ?? [];
-    const headerProbe = firstRow.join(",").toLowerCase();
-    const looksHeader = headerProbe.includes("address") && headerProbe.includes("amount");
+    const firstCell = (firstRow[0] ?? "").trim().toLowerCase();
+    const secondCell = (firstRow[1] ?? "").trim().toLowerCase();
+    const looksHeader =
+      firstCell.includes("address") &&
+      (!secondCell || secondCell.includes("amount"));
 
     const bodyRows = looksHeader ? rows.slice(1) : rows;
 
@@ -734,6 +737,9 @@ export default function Home() {
           // Keep the exact `address,amount` format (no extra spaces injected).
           return `${(parts[0] ?? "").trim()},${(parts[1] ?? "").trim()}`.trim();
         }
+
+        // Also allow address-only CSV rows for split mode.
+        if (!c1) return c0;
 
         // Keep the exact `address,amount` format (no extra spaces injected).
         return `${c0},${c1}`.trim();
@@ -1345,7 +1351,7 @@ export default function Home() {
                   <div className="flex items-center justify-between">
                     <label className="text-sm text-white/70">Recipients</label>
                     <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-white/45">
-                      Format: address,amount (one per line)
+                      Format: address,amount or address (+ Split amount)
                       <Button
                         type="button"
                         variant="outline"
