@@ -704,6 +704,7 @@ export default function Home() {
 
     const parsedCsv = Papa.parse<string[]>(text, {
       skipEmptyLines: true,
+      delimiter: ",",
     });
 
     if (parsedCsv.errors?.length) {
