@@ -1,4 +1,4 @@
-🚀 Built: Base MultiSender — a non-custodial batch sender on Base. Also it's a mini app on https://x.com/base & https://x.com/farcaster_xyz and this is my 10th Mini app.
+🚀 Built: Base MultiSender — a non-custodial batch sender on Base. Also it's a mini app on https://x.com/base & https://x.com/farcaster_xyz
 
 • Send ETH or ERC20 to hundreds/thousands of wallets fast.
 • No protocol fee — you only pay network gas.
