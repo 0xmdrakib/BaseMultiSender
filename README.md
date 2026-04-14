@@ -1,9 +1,9 @@
-🚀 Built: Base MultiSender — a non-custodial batch sender on Base. Also it's a mini app on https://x.com/base & https://x.com/farcaster_xyz
+🚀 Built: Base MultiSender — a non-custodial batch sender on Base. It's a mini app & web app on https://x.com/base
 
 • Send ETH or ERC20 to hundreds/thousands of wallets fast.
 • No protocol fee — you only pay network gas.
 
-Try this: https://multisender.online
+Try this inside base app or in web: https://multisender.online
 
 ✅ Modes:
 • ETH batch send
@@ -37,7 +37,7 @@ Perfect for:
 • Also the contract is verified you can check what's inside in contract
 
 📱Mobile-friendly UI:
-• Works cleanly on both phone + desktop.
+• Works cleanly on both mobile + desktop.
 • In mini app i added easy wallet connect feature and a clean UI.
 
 ⛽️You need to pay Only gas fee:
