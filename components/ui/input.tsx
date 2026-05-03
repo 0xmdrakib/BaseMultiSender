@@ -7,8 +7,9 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
       <input
         ref={ref}
         className={cn(
-          "w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/90 " +
-            "outline-none placeholder:text-white/30 focus:border-[#0000ff]/35 focus:ring-2 focus:ring-[#0000ff]/20",
+          "w-full rounded-[18px] border border-white/70 bg-white/[0.66] px-4 py-3 text-sm text-slate-900 backdrop-blur-xl " +
+            "shadow-[0_8px_22px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.88)] outline-none placeholder:text-slate-400 " +
+            "transition-all duration-200 focus:border-white focus:bg-white/[0.84] focus:ring-2 focus:ring-slate-900/[0.075]",
           className
         )}
         {...props}
@@ -24,8 +25,9 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
       <textarea
         ref={ref}
         className={cn(
-          "w-full min-h-[180px] rounded-2xl border border-white/10 bg-white/[0.03] p-4 font-mono text-sm text-white/90 " +
-            "outline-none placeholder:text-white/30 focus:border-[#0000ff]/35 focus:ring-2 focus:ring-[#0000ff]/20",
+          "w-full min-h-[180px] rounded-[20px] border border-white/70 bg-white/[0.66] p-4 font-mono text-sm text-slate-900 backdrop-blur-xl " +
+            "shadow-[0_8px_22px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.88)] outline-none placeholder:text-slate-400 " +
+            "transition-all duration-200 focus:border-white focus:bg-white/[0.84] focus:ring-2 focus:ring-slate-900/[0.075]",
           className
         )}
         {...props}
