@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Check, Copy, ExternalLink, HandCoins, Loader2, Share2, Upload, X } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Share2, Upload } from "lucide-react";
 import WalletConnectButton from "@/components/WalletConnect";
 
 const APP_URL = "https://multisender.online/";
@@ -72,11 +72,6 @@ const PERMIT2_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_PERMIT2_ADDRESS ?? ""
 const PAYMASTER_PROXY_URL = process.env.NEXT_PUBLIC_PAYMASTER_PROXY_SERVER_URL ?? "";
 
 const BUILDER_CODES_ENABLED = isBuilderCodesEnabled();
-
-// Optional: tip recipient address (your wallet). If not set, the UI will prompt you to configure it.
-const TIP_ADDRESS = (isAddress(process.env.NEXT_PUBLIC_TIP_ADDRESS ?? "")
-  ? (getAddress(process.env.NEXT_PUBLIC_TIP_ADDRESS as string) as Address)
-  : undefined);
 
 // BaseScan (mainnet)
 const EXPLORER_TX = (hash: string) => `https://basescan.org/tx/${hash}`;
@@ -367,61 +362,6 @@ export default function Home() {
 
   const [copied, setCopied] = useState<null | "contract" | "tx">(null);
 
-  // Tip modal (Base ETH)
-  const [tipOpen, setTipOpen] = useState(false);
-  const [ethUsd, setEthUsd] = useState<number | null>(null);
-  const [ethUsdLoading, setEthUsdLoading] = useState(false);
-  const [tipPreset, setTipPreset] = useState<"10" | "100" | "1000" | "custom">("10");
-  const [tipUsdInput, setTipUsdInput] = useState("10");
-  const [tipEthInput, setTipEthInput] = useState("");
-  const [tipLastEdited, setTipLastEdited] = useState<"usd" | "eth">("usd");
-  const [tipPending, setTipPending] = useState(false);
-  const [tipTxHash, setTipTxHash] = useState<string | null>(null);
-  const [tipStatus, setTipStatus] = useState<string | null>(null);
-
-  // Fetch ETH/USD price for tip UX (best-effort, client-side).
-  useEffect(() => {
-    if (!tipOpen) return;
-    let cancelled = false;
-
-    async function run() {
-      setEthUsdLoading(true);
-      try {
-        // CoinGecko simple price endpoint.
-        const res = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
-          { cache: "no-store" }
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const price = json?.ethereum?.usd;
-        if (!cancelled && typeof price === "number" && isFinite(price) && price > 0) {
-          setEthUsd(price);
-        }
-      } catch {
-        // Keep the UI usable even if the price feed fails.
-      } finally {
-        if (!cancelled) setEthUsdLoading(false);
-      }
-    }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [tipOpen]);
-
-  // Once we have a price, sync the derived field based on the user's last edit.
-  useEffect(() => {
-    if (!tipOpen) return;
-    if (!ethUsd) return;
-    if (tipLastEdited === "eth" && tipEthInput) {
-      syncTipFromEth(tipEthInput);
-    } else {
-      syncTipFromUsd(tipUsdInput);
-    }
-  }, [ethUsd, tipOpen]);
-
   // Token
   const [tokenInput, setTokenInput] = useState("");
   const tokenAddress = (isAddress(tokenInput) ? (getAddress(tokenInput) as Address) : undefined);
@@ -606,97 +546,6 @@ export default function Home() {
   function flashCopied(which: "contract" | "tx") {
     setCopied(which);
     window.setTimeout(() => setCopied(null), 1200);
-  }
-
-  function trimZeros(n: string) {
-    return n.replace(/(\.\d*?)0+$/u, "$1").replace(/\.$/u, "");
-  }
-
-  function syncTipFromUsd(nextUsd: string) {
-    setTipLastEdited("usd");
-    setTipUsdInput(nextUsd);
-    if (!ethUsd) {
-      setTipEthInput("");
-      return;
-    }
-    const usd = Number(nextUsd);
-    if (!isFinite(usd) || usd <= 0) {
-      setTipEthInput("");
-      return;
-    }
-    const eth = usd / ethUsd;
-    setTipEthInput(trimZeros(eth.toFixed(8)));
-  }
-
-  function syncTipFromEth(nextEth: string) {
-    setTipLastEdited("eth");
-    setTipEthInput(nextEth);
-    if (!ethUsd) {
-      return;
-    }
-    const eth = Number(nextEth);
-    if (!isFinite(eth) || eth <= 0) {
-      setTipUsdInput("");
-      return;
-    }
-    const usd = eth * ethUsd;
-    setTipUsdInput(trimZeros(usd.toFixed(2)));
-  }
-
-  async function sendTip() {
-    setTipStatus(null);
-    setTipTxHash(null);
-
-    if (!isConnected || !address) {
-      setTipStatus("Connect your wallet to tip.");
-      return;
-    }
-    if (!isBaseChain) {
-      setTipStatus("Please switch to Base mainnet.");
-      return;
-    }
-    if (!TIP_ADDRESS) {
-      setTipStatus("Set NEXT_PUBLIC_TIP_ADDRESS (your wallet) to receive tips.");
-      return;
-    }
-    if (!tipEthInput) {
-      setTipStatus("Enter a tip amount.");
-      return;
-    }
-
-    let value: bigint;
-    try {
-      value = parseEther(tipEthInput);
-    } catch {
-      setTipStatus("Invalid tip amount.");
-      return;
-    }
-    if (value <= 0n) {
-      setTipStatus("Tip amount must be greater than zero.");
-      return;
-    }
-
-    setTipPending(true);
-    setTipStatus("Submitting tip…");
-
-    try {
-      const hash = await sendTransactionAsync({
-        to: TIP_ADDRESS,
-        value,
-        chainId: base.id,
-        ...(BUILDER_CODES_ENABLED ? { data: (appendBuilderCodesToCalldata("0x" as Hex) as Hex) } : {}),
-      });
-
-      setTipTxHash(hash);
-      setTipStatus("Tip submitted. Waiting for confirmation…");
-
-      await publicClient?.waitForTransactionReceipt({ hash });
-      setTipStatus("Tip confirmed. Thank you!");
-    } catch (e: any) {
-      setTipStatus(e?.shortMessage || e?.message || "Tip failed.");
-    } finally {
-      setTipPending(false);
-    }
   }
 
   async function onUploadCsv(file: File) {
@@ -1174,8 +1023,8 @@ export default function Home() {
     return (
       <main className="min-h-screen px-6 py-10">
         <div className="mx-auto max-w-5xl">
-          <div className="h-10 w-64 rounded-xl bg-white/5" />
-          <div className="mt-6 h-80 rounded-3xl bg-white/5" />
+          <div className="h-10 w-64 rounded-full bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl" />
+          <div className="premium-glass mt-6 h-80 rounded-[30px]" />
         </div>
       </main>
     );
@@ -1183,12 +1032,12 @@ export default function Home() {
 
   return (
     <>
-      <main className="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
-        <div className="mx-auto max-w-6xl">
+      <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 sm:py-10">
+        <div className="relative mx-auto max-w-6xl">
           {/* Header */}
-          <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.02] p-4 shadow-[0_18px_70px_-50px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:flex-row sm:items-start sm:justify-between sm:p-6">
+          <div className="premium-glass-strong premium-shine flex flex-col gap-4 rounded-[32px] p-4 ring-1 ring-slate-900/[0.025] sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div className="flex items-start gap-3">
-              <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
+              <div className="relative mt-0.5 h-11 w-11 overflow-hidden rounded-[20px] border border-white/80 bg-white/[0.78] shadow-[0_12px_28px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.95)]">
                 <img
                   src="/logo-mark.png"
                   alt="Multi Sender"
@@ -1199,37 +1048,18 @@ export default function Home() {
 
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Base MultiSender</h1>
+                  <h1 className="text-2xl font-semibold tracking-[-0.03em] text-slate-950 sm:text-3xl">Base MultiSender</h1>
                 </div>
-                <p className="mt-1 text-sm text-white/60">Non-custodial. You pay only network gas.</p>
+                <p className="mt-1 text-sm leading-6 text-slate-500">Non-custodial. You pay only network gas.</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3 sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                aria-label="Tip"
-                className="h-10 w-10 p-0 rounded-2xl"
-                onClick={() => {
-                  setTipStatus(null);
-                  setTipTxHash(null);
-                  setTipOpen(true);
-                  // Keep the preset selection but ensure inputs stay in sync.
-                  if (tipLastEdited === "eth") {
-                    syncTipFromEth(tipEthInput);
-                  } else {
-                    syncTipFromUsd(tipUsdInput);
-                  }
-                }}
-              >
-                <HandCoins className="h-4 w-4" />
-              </Button>
               <WalletConnectButton />
             </div>
           </div>
 
-          <div className="my-6 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent sm:my-8" />
+          <div className="premium-divider my-6 sm:my-8" />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {/* Left: composer */}
@@ -1237,15 +1067,15 @@ export default function Home() {
               <CardHeader className="pb-4 px-4 pt-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <div className="inline-flex items-center gap-1 rounded-2xl bg-white/5 ring-1 ring-white/10 p-1">
+                    <div className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/[0.52] p-1 shadow-[0_10px_24px_rgba(15,23,42,0.045),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl">
                       <button
                         type="button"
                         onClick={() => setMode("ETH")}
                         className={[
-                          "px-3 py-1.5 text-sm font-medium rounded-xl transition",
+                          "px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200",
                           mode === "ETH"
-                            ? "bg-[#0000ff] text-white shadow-[0_10px_30px_-18px_rgba(0,0,255,0.8)]"
-                            : "text-white/80 hover:bg-white/[0.06]",
+                            ? "bg-gradient-to-b from-slate-800 to-[#020617] text-white shadow-[0_12px_26px_rgba(2,6,23,0.24),inset_0_1px_0_rgba(255,255,255,0.14)]"
+                            : "text-slate-500 hover:bg-white/[0.78] hover:text-slate-950",
                         ].join(" ")}
                       >
                         ETH
@@ -1254,10 +1084,10 @@ export default function Home() {
                         type="button"
                         onClick={() => setMode("ERC20")}
                         className={[
-                          "px-3 py-1.5 text-sm font-medium rounded-xl transition",
+                          "px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200",
                           mode === "ERC20"
-                            ? "bg-[#0000ff] text-white shadow-[0_10px_30px_-18px_rgba(0,0,255,0.8)]"
-                            : "text-white/80 hover:bg-white/[0.06]",
+                            ? "bg-gradient-to-b from-slate-800 to-[#020617] text-white shadow-[0_12px_26px_rgba(2,6,23,0.24),inset_0_1px_0_rgba(255,255,255,0.14)]"
+                            : "text-slate-500 hover:bg-white/[0.78] hover:text-slate-950",
                         ].join(" ")}
                       >
                         ERC20
@@ -1306,8 +1136,8 @@ export default function Home() {
                   <div className="space-y-3">
                     <div>
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <label className="text-sm text-white/70">Token</label>
-                        <div className="text-xs text-white/45">
+                        <label className="text-sm text-slate-600">Token</label>
+                        <div className="text-xs text-slate-500">
                           {tokenAddress && decimals !== undefined ? (
                             <>
                               {symbol ? `${symbol} · ` : ""}
@@ -1324,22 +1154,22 @@ export default function Home() {
                         placeholder="0x…"
                         className="mt-1"
                       />
-                      <div className="mt-1 text-[11px] text-white/45">
+                      <div className="mt-1 text-[11px] text-slate-500">
                         Approve grants Permit2 permission to pull exactly the batch total (not unlimited).
                       </div>
                     </div>
 
                     {tokenAddress && total > 0n && (
-                      <div className="flex items-center justify-between text-xs text-white/45">
+                      <div className="flex items-center justify-between text-xs text-slate-500">
                         <div>
                           Permit2 allowance (token → Permit2):{" "}
-                          <span className="text-white/70">
+                          <span className="text-slate-600">
                             {decimals !== undefined
                               ? groupDecimalString(formatUnits(allowanceToPermit2, decimals))
                               : groupDecimalString(allowanceToPermit2.toString())}
                           </span>
                         </div>
-                        <div className={needsApprove ? "text-amber-200" : "text-emerald-200"}>
+                        <div className={needsApprove ? "text-amber-700" : "text-emerald-700"}>
                           {needsApprove ? "Needs approval" : "Approved"}
                         </div>
                       </div>
@@ -1350,15 +1180,15 @@ export default function Home() {
                 {/* Recipients editor */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm text-white/70">Recipients</label>
-                    <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-white/45">
+                    <label className="text-sm text-slate-600">Recipients</label>
+                    <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-slate-500">
                       Format: address,amount or address (+ Split amount)
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => setExpanded((v) => !v)}
                         size="sm"
-                        className="h-7 rounded-xl"
+                        className="h-7 rounded-full px-3"
                       >
                         {expanded ? "Collapse" : "Expand"}
                       </Button>
@@ -1366,7 +1196,7 @@ export default function Home() {
                   </div>
 
 	                  <div className="flex flex-wrap items-center justify-between gap-2">
-	                    <div className="text-xs text-white/45">
+	                    <div className="text-xs text-slate-500">
 	                      Split amount (optional)
 	                    </div>
 	                    <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1382,17 +1212,17 @@ export default function Home() {
 	                          setStatus(null);
 	                        }}
 	                      />
-	                      <span className="text-xs text-white/45 whitespace-nowrap">
+	                      <span className="text-xs text-slate-500 whitespace-nowrap">
 	                        {mode === "ETH" ? "ETH" : symbol || "TOKEN"}
 	                      </span>
 	                    </div>
 	                  </div>
 
-                  <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-white/[0.02]">
+                  <div className="relative overflow-hidden rounded-[24px] border border-white/70 bg-white/[0.54] shadow-[0_14px_34px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl">
                     <div className="flex min-w-0">
                       <div
                         aria-hidden
-                        className="flex-shrink-0 select-none overflow-hidden border-r border-white/10 bg-white/[0.02]"
+                        className="flex-shrink-0 select-none overflow-hidden border-r border-slate-200/70 bg-white/[0.48]"
                         onWheel={(e) => {
                           const ta = textareaRef.current;
                           if (!ta) return;
@@ -1415,7 +1245,7 @@ export default function Home() {
                           value={lineNumbersText}
                           spellCheck={false}
                           wrap="off"
-                          className="h-full w-full resize-none bg-transparent px-3 py-2 font-mono text-base sm:text-sm text-white/35 text-right outline-none overflow-y-scroll scrollbar-none pointer-events-none"
+                          className="h-full w-full resize-none bg-transparent px-3 py-2 font-mono text-base text-slate-400 outline-none overflow-y-scroll scrollbar-none pointer-events-none text-right sm:text-sm"
                           style={{
                             lineHeight: `${lineHeightPx}px`,
                             WebkitTextSizeAdjust: "none",
@@ -1445,7 +1275,7 @@ export default function Home() {
                         className={[
                           // Disable line-wrapping so each logical line remains one visual line.
                           // This keeps line numbers perfectly aligned with each address line.
-                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-base sm:text-sm text-white outline-none placeholder:text-white/20 scrollbar-dark whitespace-pre overflow-x-auto",
+                          "w-full min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-base text-slate-950 outline-none placeholder:text-slate-400 scrollbar-dark whitespace-pre overflow-x-auto sm:text-sm",
                           "overflow-y-auto",
                         ].join(" ")}
                         style={{
@@ -1459,24 +1289,24 @@ export default function Home() {
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
-                    <div className="text-white/50">
-                      Parsed: <span className="text-white/70">{recipients.length}</span> recipients
+                    <div className="text-slate-500">
+                      Parsed: <span className="text-slate-600">{recipients.length}</span> recipients
                       {invalidLine ? (
-                        <span className="ml-2 text-rose-300">
-                          Invalid line: <span className="text-rose-200/90">"{invalidLine}"</span>
+                        <span className="ml-2 text-rose-600">
+                          Invalid line: <span className="text-rose-700">"{invalidLine}"</span>
                         </span>
                       ) : mode === "ERC20" && !tokenAddress && recipients.length > 0 ? (
-                        <span className="ml-2 text-amber-200">Paste your token contract address to continue.</span>
+                        <span className="ml-2 text-amber-700">Paste your token contract address to continue.</span>
                       ) : null}
                     </div>
-                    <div className="text-white/45">
-                      Total: <span className="text-white/70">{totalLabel}</span>
+                    <div className="text-slate-500">
+                      Total: <span className="text-slate-600">{totalLabel}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Primary action */}
-                <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3 sm:p-4">
+                <div className="premium-inset rounded-[24px] p-3 sm:p-4">
                   {mode === "ETH" ? (
                     <Button
                       type="button"
@@ -1551,9 +1381,9 @@ export default function Home() {
                   )}
 
                   {status ? (
-                    <div className="mt-3 rounded-xl bg-black/30 ring-1 ring-white/10 px-3 py-2 text-sm text-white/70">
+                    <div className="mt-3 rounded-[18px] border border-white/70 bg-white/[0.62] px-3 py-2 text-sm text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl">
                       {sendProgress && sendProgress.parts > 1 ? (
-                        <div className="mb-1 text-xs text-white/50">
+                        <div className="mb-1 text-xs text-slate-500">
                           Sending in {sendProgress.parts} parts (max {MAX_RECIPIENTS_PER_TX}/tx) • Confirmed{" "}
                           {sendProgress.confirmed}/{sendProgress.parts}
                         </div>
@@ -1569,26 +1399,26 @@ export default function Home() {
             <div className="lg:col-span-5 space-y-6">
               <Card>
                 <CardHeader className="pb-3 px-4 pt-4 sm:px-6 sm:pt-6">
-                  <CardTitle className="text-white">Review</CardTitle>
-                  <CardDescription className="text-white/50">
+                  <CardTitle className="text-slate-950">Review</CardTitle>
+                  <CardDescription className="text-slate-500">
                     Strict mode is atomic (all-or-nothing). If any transfer fails, the transaction reverts.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6">
                   <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm">
-                    <div className="text-white/50">Network</div>
-                    <div className="text-right text-white/80">Base mainnet</div>
+                    <div className="text-slate-500">Network</div>
+                    <div className="text-right text-slate-700">Base mainnet</div>
 
-                    <div className="text-white/50">Sender</div>
-                    <div className="text-right text-white/80">{address ? shortAddr(address) : "—"}</div>
+                    <div className="text-slate-500">Sender</div>
+                    <div className="text-right text-slate-700">{address ? shortAddr(address) : "—"}</div>
 
-                    <div className="text-white/50">Contract</div>
+                    <div className="text-slate-500">Contract</div>
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <a
                         href={EXPLORER_ADDR(MULTISENDER_ADDRESS)}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-white/80 hover:text-white underline-offset-4 hover:underline"
+                        className="text-slate-700 hover:text-slate-950 underline-offset-4 hover:underline"
                       >
                         {shortAddr(MULTISENDER_ADDRESS)}
                       </a>
@@ -1619,30 +1449,30 @@ export default function Home() {
 
                     {mode === "ERC20" && (
                       <>
-                        <div className="text-white/50">Token</div>
-                        <div className="text-right text-white/80">{tokenAddress ? shortAddr(tokenAddress) : "—"}</div>
+                        <div className="text-slate-500">Token</div>
+                        <div className="text-right text-slate-700">{tokenAddress ? shortAddr(tokenAddress) : "—"}</div>
                       </>
                     )}
 
-                    <div className="text-white/50">Recipients</div>
-                    <div className="text-right text-white/80">{recipients.length}</div>
+                    <div className="text-slate-500">Recipients</div>
+                    <div className="text-right text-slate-700">{recipients.length}</div>
 
-                    <div className="text-white/50">Total</div>
-                    <div className="text-right text-white/80">{totalLabel}</div>
+                    <div className="text-slate-500">Total</div>
+                    <div className="text-right text-slate-700">{totalLabel}</div>
 
-                    <div className="text-white/50">Estimated fee</div>
-                    <div className="text-right text-white/80">
+                    <div className="text-slate-500">Estimated fee</div>
+                    <div className="text-right text-slate-700">
                       {feeLoading ? <Loader2 className="ml-auto h-4 w-4 animate-spin" /> : formatFeeEth(feeWei)}
                     </div>
                   </div>
 
                   {mode === "ERC20" ? (
-                    <div className="rounded-2xl bg-black/25 ring-1 ring-white/10 p-3 text-xs text-white/55">
+                    <div className="premium-inset rounded-[20px] p-3 text-xs leading-5 text-slate-500">
                       Token transfers will be sent from the contract to recipients. There is also a single on-chain
                       transfer into the contract (your wallet → contract) to fund the batch.
                     </div>
                   ) : (
-                    <div className="rounded-2xl bg-black/25 ring-1 ring-white/10 p-3 text-xs text-white/55">
+                    <div className="premium-inset rounded-[20px] p-3 text-xs leading-5 text-slate-500">
                       ETH is forwarded by the contract in one atomic batch.
                     </div>
                   )}
@@ -1654,7 +1484,7 @@ export default function Home() {
                 <Card>
                   <CardHeader className="pb-3 px-4 pt-4 sm:px-6 sm:pt-6">
                     <div className="flex items-center justify-between gap-3">
-                      <CardTitle className="text-white">Receipt</CardTitle>
+                      <CardTitle className="text-slate-950">Receipt</CardTitle>
                       <Badge>
                         {receipts.length}/{receipts[0].parts}
                       </Badge>
@@ -1662,17 +1492,17 @@ export default function Home() {
                   </CardHeader>
                   <CardContent className="space-y-3 px-4 pb-4 sm:px-6 sm:pb-6">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3">
-                        <div className="text-xs text-white/50">Recipients</div>
-                        <div className="mt-1 text-lg font-semibold text-white">{recipients.length}</div>
+                      <div className="premium-inset rounded-[22px] p-3">
+                        <div className="text-xs text-slate-500">Recipients</div>
+                        <div className="mt-1 text-lg font-semibold text-slate-950">{recipients.length}</div>
                       </div>
-                      <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3">
-                        <div className="text-xs text-white/50">Mode</div>
-                        <div className="mt-1 text-lg font-semibold text-white">{mode}</div>
+                      <div className="premium-inset rounded-[22px] p-3">
+                        <div className="text-xs text-slate-500">Mode</div>
+                        <div className="mt-1 text-lg font-semibold text-slate-950">{mode}</div>
                       </div>
-                      <div className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-3">
-                        <div className="text-xs text-white/50">Total</div>
-                        <div className="mt-1 text-lg font-semibold text-white">{totalLabel}</div>
+                      <div className="premium-inset rounded-[22px] p-3">
+                        <div className="text-xs text-slate-500">Total</div>
+                        <div className="mt-1 text-lg font-semibold text-slate-950">{totalLabel}</div>
                       </div>
                     </div>
 
@@ -1680,14 +1510,14 @@ export default function Home() {
                       {receipts.map((r) => (
                         <div
                           key={r.hash}
-                          className="rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-4"
+                          className="premium-inset rounded-[22px] p-4"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="text-sm font-medium text-white/85">
+                              <div className="text-sm font-medium text-slate-800">
                                 Part {r.part}/{r.parts}
                               </div>
-                              <div className="mt-0.5 text-xs text-white/50">
+                              <div className="mt-0.5 text-xs text-slate-500">
                                 {r.recipients} recipients • {r.amountLabel}
                               </div>
                             </div>
@@ -1700,7 +1530,7 @@ export default function Home() {
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-2xl"
+                              className="rounded-full"
                               onClick={() => window.open(EXPLORER_TX(r.hash), "_blank")}
                             >
                               Explorer <ExternalLink className="ml-2 h-4 w-4" />
@@ -1708,7 +1538,7 @@ export default function Home() {
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-2xl"
+                              className="rounded-full"
                               onClick={() => copyToClipboard(r.hash)}
                             >
                               Copy <Copy className="ml-2 h-4 w-4" />
@@ -1723,182 +1553,12 @@ export default function Home() {
             </div>
           </div>
 
-          <footer className="mt-10 text-center text-xs text-white/40">
+          <footer className="mt-10 text-center text-xs text-slate-400">
             © 2026 Md. Rakib • made with love and passion.
           </footer>
         </div>
       </main>
 
-      {tipOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close tip dialog"
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setTipOpen(false)}
-          />
-
-          <Card className="relative w-full max-w-md">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-white">Tip</CardTitle>
-                  <CardDescription>
-                    Support the developer, Send a small Base ETH tip
-                  </CardDescription>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-9 w-9 p-0 rounded-2xl"
-                  onClick={() => setTipOpen(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              <div className="rounded-2xl bg-black/25 ring-1 ring-white/10 p-3">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="text-white/60">Recipient</div>
-                  <div className="text-right text-white/80">
-                    {TIP_ADDRESS ? (
-                      <a
-                        href={EXPLORER_ADDR(TIP_ADDRESS)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:text-white underline-offset-4 hover:underline"
-                      >
-                        {shortAddr(TIP_ADDRESS)}
-                      </a>
-                    ) : (
-                      <span className="text-amber-200/90">Configure NEXT_PUBLIC_TIP_ADDRESS</span>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs">
-                  <div className="text-white/45">Rate</div>
-                  <div className="text-right text-white/60">
-                    {ethUsdLoading ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> fetching…
-                      </span>
-                    ) : ethUsd ? (
-                      <>1 ETH ≈ ${ethUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</>
-                    ) : (
-                      <>Price unavailable</>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-2">
-                {([
-                  "10",
-                  "100",
-                  "1000",
-                ] as const).map((v) => (
-                  <Button
-                    key={v}
-                    type="button"
-                    variant={tipPreset === v ? "primary" : "outline"}
-                    className="rounded-2xl"
-                    onClick={() => {
-                      setTipPreset(v);
-                      syncTipFromUsd(v);
-                    }}
-                  >
-                    ${v}
-                  </Button>
-                ))}
-                <Button
-                  type="button"
-                  variant={tipPreset === "custom" ? "primary" : "outline"}
-                  className="rounded-2xl"
-                  onClick={() => setTipPreset("custom")}
-                >
-                  Custom
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <div className="mb-1 text-xs text-white/60">USD</div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-white/50">$</span>
-                    <Input
-                      value={tipUsdInput}
-                      inputMode="decimal"
-                      placeholder="10"
-                      className="pl-7"
-                      onChange={(e) => {
-                        setTipPreset("custom");
-                        syncTipFromUsd(e.target.value);
-                      }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-1 text-xs text-white/60">ETH</div>
-                  <div className="relative">
-                    <Input
-                      value={tipEthInput}
-                      inputMode="decimal"
-                      placeholder={ethUsd ? "0.00" : "—"}
-                      className="pr-14"
-                      onChange={(e) => {
-                        setTipPreset("custom");
-                        syncTipFromEth(e.target.value);
-                      }}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-white/50">ETH</span>
-                  </div>
-                </div>
-              </div>
-
-              {tipStatus ? <div className="text-sm text-white/70">{tipStatus}</div> : null}
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="rounded-2xl"
-                  disabled={
-                    tipPending ||
-                    !isConnected ||
-                    !isBaseChain ||
-                    !TIP_ADDRESS ||
-                    !tipEthInput ||
-                    (() => {
-                      try {
-                        return parseEther(tipEthInput) <= 0n;
-                      } catch {
-                        return true;
-                      }
-                    })()
-                  }
-                  onClick={sendTip}
-                >
-                  {tipPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Send tip
-                </Button>
-
-                {tipTxHash ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-2xl"
-                    onClick={() => window.open(EXPLORER_TX(tipTxHash), "_blank")}
-                  >
-                    Explorer <ExternalLink className="ml-2 h-4 w-4" />
-                  </Button>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
     </>
   );
 }
