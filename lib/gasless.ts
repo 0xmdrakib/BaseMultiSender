@@ -13,7 +13,7 @@ function toHexValue(value: bigint): Hex {
 }
 
 export function getRpcRequester(walletClient: any): RpcRequester {
-  // Prefer a client-scoped requester (works for WalletConnect and injected connectors).
+  // Prefer a client-scoped requester (works with the active injected connector).
   if (walletClient?.request && typeof walletClient.request === "function") {
     return (args) => walletClient.request(args);
   }
