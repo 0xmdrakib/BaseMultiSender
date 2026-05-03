@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import "@rainbow-me/rainbowkit/styles.css";
 import { Providers } from "./providers";
 import { MiniAppReady } from "./miniapp-ready";
 
@@ -21,7 +20,7 @@ const MINIAPP_EMBED = {
       url: `${APP_URL}/`,
       // Use your existing splash assets
       splashImageUrl: `${APP_URL}/splash.png`,
-      splashBackgroundColor: "#0000FF",
+      splashBackgroundColor: "#f5f7fb",
     },
   },
 } as const;
