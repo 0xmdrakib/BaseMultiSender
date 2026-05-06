@@ -1,45 +1,112 @@
-🚀 Built: Base MultiSender — a non-custodial batch sender on Base. It's a mini app & web app on https://x.com/base
+# Base MultiSender
 
-• Send ETH or ERC20 to hundreds/thousands of wallets fast.
-• No protocol fee — you only pay network gas.
+Base MultiSender is a non-custodial batch sender for distributing ETH and ERC-20 tokens on Base.
 
-Try this inside base app or in web: https://multisender.online
+**Live app:** https://multisender.online
 
-✅ Modes:
-• ETH batch send
-• ERC20 batch send (Permit2)
-• Strict mode = atomic (all-or-nothing). If any transfer fails, the tx reverts.
+---
 
-🎯 Made for creators & communities
-Perfect for:
-• Creator token distribution
-• Airdrops (whitelist/community rewards)
-• Bounties / contributors payouts
-• Payroll for DAOs
-• Quest rewards / campaign payouts
+## Overview
 
-📄 CSV power flow:
-• Upload CSV → auto-parse → review totals → send.
-• Includes copy buttons, explorer links, and clear receipts for each successful transaction.
+Base MultiSender helps creators, communities, teams, and DAO operators send funds to many wallets without paying an extra protocol fee.
 
-🔐 ERC20 UX (safer approvals):
-• Approve EXACT batch total (not unlimited), then sign + send.
-• This avoids “infinite approval” risk and keeps permissions minimal.
+The app supports both direct ETH batch sends and ERC-20 batch sends through Permit2. Users can paste recipient lists manually, upload a CSV file, review totals, confirm the transaction from their wallet, and track receipts for each successful batch.
 
-🧩 Large lists handled professionally:
-• If recipients > 500, it auto-splits into multiple txs. Example: 1400 → 500 / 500 / 400
-• So transactions stay reliable instead of failing from big payloads.
+## Features
 
-📊 Transparency (no confusion) During multi-part sends, users see:
-• Total parts (e.g., 3 txs)
-• Current part progress (1/3, 2/3…)
-• A receipt per part, each with its own tx hash
-• Also the contract is verified you can check what's inside in contract
+- Batch send ETH to multiple Base wallets
+- Batch send ERC-20 tokens with Permit2-based signing
+- CSV upload for recipient and amount lists
+- Optional split amount mode for sending the same amount to many addresses
+- Strict atomic batch behavior where failed transfers revert the transaction
+- Automatic batching for large recipient lists, with up to 500 recipients per transaction
+- Exact ERC-20 approval flow instead of unlimited approvals
+- Token symbol, decimals, allowance, recipient count, total, and fee review before sending
+- Receipt table with transaction hashes and BaseScan links
+- Mini app support for Farcaster and Base app environments
+- Optional paymaster flow for wallets that support sponsored calls
+- Builder Code attribution support for Base ecosystem tracking
 
-📱Mobile-friendly UI:
-• Works cleanly on both mobile + desktop.
-• In mini app i added easy wallet connect feature and a clean UI.
+## Supported network
 
-⛽️You need to pay Only gas fee:
-• Most of others bulk sender taking a huge protocol fee from user.
-• And i built this with 0 protocol fee.
+- Base Mainnet
+
+The app is designed for Base and requires the connected wallet to be on Base Mainnet before sending.
+
+## Sending behavior
+
+### ETH batch sends
+
+ETH sends are handled through the MultiSender contract. The user provides a list of recipients and amounts, then sends the exact total as `msg.value`. The contract forwards ETH to each recipient in the batch.
+
+### ERC-20 batch sends
+
+ERC-20 sends use Uniswap Permit2. The app asks the user to approve the exact batch total to Permit2 when needed, then signs a Permit2 message and submits the batch transaction through the MultiSender contract.
+
+This keeps the approval flow smaller and avoids unlimited token approvals.
+
+### Large recipient lists
+
+Recipient lists are automatically split into multiple transactions when they contain more than 500 recipients. For example, a list of 1,400 recipients is sent as three parts: 500, 500, and 400.
+
+Each part has its own wallet confirmation, transaction hash, and receipt entry.
+
+### CSV format
+
+The CSV upload supports simple recipient lists such as:
+
+```csv
+address,amount
+0x0000000000000000000000000000000000000000,0.01
+0x0000000000000000000000000000000000000000,0.02
+```
+
+The app also supports address-only rows when using split amount mode.
+
+## Tech stack
+
+- Next.js 15
+- React 19
+- TypeScript
+- Tailwind CSS
+- Wagmi
+- viem
+- Uniswap Permit2 SDK
+- Farcaster Mini App SDK
+- TanStack Query
+- PapaParse
+
+---
+
+## Getting started
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment variables
+
+Create a `.env` file in the project root. Then copy the values from [.env.example](./.env.example) and fill them in.
+
+The app includes default Base Mainnet contract values, but production deployments should verify and configure the contract addresses before launch.
+
+### 3. Run the development server
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000` in your browser.
+
+### 4. Build for production
+
+```bash
+npm run build
+npm run start
+```
+
+## License
+
+This project is licensed under the [MIT License](./LICENSE).
