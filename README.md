@@ -2,7 +2,7 @@
 
 Base MultiSender is a non-custodial batch sender for distributing ETH and ERC-20 tokens on Base.
 
-**Live app:** https://multisender.online
+**Live app:** https://bulksender.rakibhq.xyz
 
 ---
 
@@ -77,35 +77,6 @@ The app also supports address-only rows when using split amount mode.
 - PapaParse
 
 ---
-
-## Getting started
-
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure environment variables
-
-Create a `.env` file in the project root. Then copy the values from [.env.example](./.env.example) and fill them in.
-
-The app includes default Base Mainnet contract values, but production deployments should verify and configure the contract addresses before launch.
-
-### 3. Run the development server
-
-```bash
-npm run dev
-```
-
-Open `http://localhost:3000` in your browser.
-
-### 4. Build for production
-
-```bash
-npm run build
-npm run start
-```
 
 ## License
 
