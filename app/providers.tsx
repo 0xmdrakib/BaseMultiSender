@@ -55,7 +55,7 @@ const config = createConfig({
               name: "Bulk Sender",
               description: "0 protocol fee multi-sender on Base",
               url: "https://bulksender.rakibhq.xyz",
-              icons: ["https://bulksender.rakibhq.xyz/logo.png"],
+              icons: ["https://bulksender.rakibhq.xyz/bulk-sender-mark.png"],
             },
             qrModalOptions: {
               themeMode: "dark",

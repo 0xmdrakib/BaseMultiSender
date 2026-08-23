@@ -988,7 +988,7 @@ export default function Home() {
             <div className="flex items-start gap-3">
               <div className="relative mt-0.5 h-11 w-11 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-none">
                 <img
-                  src="/logo.png"
+                  src="/bulk-sender-mark.png"
                   alt="Bulk Sender"
                   className={`h-full w-full ${LOGO_FIT_CLASS} object-center`}
                   style={{ transform: `scale(${LOGO_ZOOM})` }}
