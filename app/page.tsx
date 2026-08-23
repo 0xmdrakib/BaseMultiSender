@@ -986,7 +986,7 @@ export default function Home() {
           {/* Header */}
           <div className="premium-glass-strong premium-shine premium-edge premium-edge--hero flex flex-col gap-4 rounded-[32px] p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div className="flex items-start gap-3">
-              <div className="relative mt-0.5 h-11 w-11 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white/[0.82] shadow-[0_10px_24px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.10)]">
+              <div className="relative mt-0.5 h-11 w-11 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white/[0.82] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_4px_10px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.98)]">
                 <img
                   src="/logo-mark.png"
                   alt="Multi Sender"
@@ -1016,14 +1016,14 @@ export default function Home() {
               <CardHeader className="pb-4 px-4 pt-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <div className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/[0.58] p-1 shadow-[0_8px_20px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.08)] backdrop-blur-xl">
+                    <div className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/[0.58] p-1 shadow-[0_1px_2px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.07)] backdrop-blur-xl">
                       <button
                         type="button"
                         onClick={() => setMode("ETH")}
                         className={[
                           "px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200",
                           mode === "ETH"
-                            ? "bg-gradient-to-b from-slate-800 to-[#020617] text-white shadow-[0_12px_26px_rgba(2,6,23,0.24),inset_0_1px_0_rgba(255,255,255,0.14)]"
+                            ? "bg-gradient-to-b from-slate-800 to-[#020617] text-white shadow-[0_1px_2px_rgba(2,6,23,0.16),0_4px_9px_rgba(2,6,23,0.12),inset_0_1px_0_rgba(255,255,255,0.14)]"
                             : "text-slate-500 hover:bg-white/[0.78] hover:text-slate-950",
                         ].join(" ")}
                       >
@@ -1035,7 +1035,7 @@ export default function Home() {
                         className={[
                           "px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200",
                           mode === "ERC20"
-                            ? "bg-gradient-to-b from-slate-800 to-[#020617] text-white shadow-[0_12px_26px_rgba(2,6,23,0.24),inset_0_1px_0_rgba(255,255,255,0.14)]"
+                            ? "bg-gradient-to-b from-slate-800 to-[#020617] text-white shadow-[0_1px_2px_rgba(2,6,23,0.16),0_4px_9px_rgba(2,6,23,0.12),inset_0_1px_0_rgba(255,255,255,0.14)]"
                             : "text-slate-500 hover:bg-white/[0.78] hover:text-slate-950",
                         ].join(" ")}
                       >
@@ -1330,7 +1330,7 @@ export default function Home() {
                   )}
 
                   {status ? (
-                    <div className="mt-3 rounded-[18px] border border-white/70 bg-white/[0.62] px-3 py-2 text-sm text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl">
+                    <div className="mt-3 rounded-[18px] border border-slate-200/80 bg-white/[0.70] px-3 py-2 text-sm text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-xl">
                       {sendProgress && sendProgress.parts > 1 ? (
                         <div className="mb-1 text-xs text-slate-500">
                           Sending in {sendProgress.parts} parts (max {MAX_RECIPIENTS_PER_TX}/tx) • Confirmed{" "}

@@ -15,7 +15,7 @@ export function ReceiptTable({ rows }: { rows: ReceiptRow[] }) {
   if (!rows.length) return null;
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/70 bg-white/[0.58] shadow-[0_14px_34px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl">
+    <div className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-white/[0.64] shadow-[0_1px_2px_rgba(15,23,42,0.025),0_5px_14px_rgba(15,23,42,0.03),inset_0_1px_0_rgba(255,255,255,0.94)] backdrop-blur-xl">
       <div className="grid grid-cols-12 gap-0 border-b border-white/60 bg-white/[0.48] px-4 py-3 text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
         <div className="col-span-1">#</div>
         <div className="col-span-5">Recipient</div>

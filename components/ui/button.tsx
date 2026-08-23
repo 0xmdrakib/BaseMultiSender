@@ -25,24 +25,24 @@ export function Button({
   const variants: Record<string, string> = {
     default:
       "border border-slate-950 bg-gradient-to-b from-slate-800 to-slate-950 text-white " +
-      "shadow-[0_14px_30px_rgba(2,6,23,0.24),inset_0_1px_0_rgba(255,255,255,0.16)] " +
-      "hover:-translate-y-0.5 hover:from-slate-700 hover:to-slate-950 hover:shadow-[0_18px_40px_rgba(2,6,23,0.28),inset_0_1px_0_rgba(255,255,255,0.18)] " +
+      "shadow-[0_1px_2px_rgba(2,6,23,0.16),0_6px_14px_rgba(2,6,23,0.12),inset_0_1px_0_rgba(255,255,255,0.16)] " +
+      "hover:-translate-y-0.5 hover:from-slate-700 hover:to-slate-950 hover:shadow-[0_1px_2px_rgba(2,6,23,0.16),0_8px_18px_rgba(2,6,23,0.15),inset_0_1px_0_rgba(255,255,255,0.18)] " +
       "before:absolute before:inset-x-3 before:top-0 before:h-px before:bg-white/30",
     primary:
       "border border-slate-950 bg-gradient-to-b from-slate-800 to-slate-950 text-white " +
-      "shadow-[0_14px_30px_rgba(2,6,23,0.24),inset_0_1px_0_rgba(255,255,255,0.16)] " +
-      "hover:-translate-y-0.5 hover:from-slate-700 hover:to-slate-950 hover:shadow-[0_18px_40px_rgba(2,6,23,0.28),inset_0_1px_0_rgba(255,255,255,0.18)] " +
+      "shadow-[0_1px_2px_rgba(2,6,23,0.16),0_6px_14px_rgba(2,6,23,0.12),inset_0_1px_0_rgba(255,255,255,0.16)] " +
+      "hover:-translate-y-0.5 hover:from-slate-700 hover:to-slate-950 hover:shadow-[0_1px_2px_rgba(2,6,23,0.16),0_8px_18px_rgba(2,6,23,0.15),inset_0_1px_0_rgba(255,255,255,0.18)] " +
       "before:absolute before:inset-x-3 before:top-0 before:h-px before:bg-white/30",
     secondary:
       "border border-slate-200/85 bg-white/[0.76] text-slate-700 backdrop-blur-xl " +
-      "shadow-[0_9px_22px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.10)] " +
+      "shadow-[0_1px_2px_rgba(15,23,42,0.04),0_3px_8px_rgba(15,23,42,0.025),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.08)] " +
       "hover:-translate-y-0.5 hover:border-slate-300/80 hover:bg-white/95 hover:text-slate-950",
     ghost:
       "border border-transparent bg-transparent text-slate-600 hover:bg-white/[0.58] hover:text-slate-950 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]",
     outline:
       "border border-slate-200/85 bg-white/[0.58] text-slate-700 backdrop-blur-xl " +
-      "shadow-[0_7px_18px_rgba(15,23,42,0.045),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.09)] " +
-      "hover:-translate-y-0.5 hover:border-slate-300/85 hover:bg-white/[0.90] hover:text-slate-950 hover:shadow-[0_13px_28px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,1)]",
+      "shadow-[0_1px_2px_rgba(15,23,42,0.035),0_3px_8px_rgba(15,23,42,0.02),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.075)] " +
+      "hover:-translate-y-0.5 hover:border-slate-300/85 hover:bg-white/[0.90] hover:text-slate-950 hover:shadow-[0_1px_2px_rgba(15,23,42,0.04),0_5px_12px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,1)]",
     danger:
       "border border-rose-200/80 bg-rose-50/80 text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] hover:bg-rose-100/90",
   };
