@@ -9,7 +9,12 @@ import { baseAccount, injected } from "wagmi/connectors";
 const config = createConfig({
   chains: [base],
   transports: {
-    [base.id]: http(),
+    // The browser only sees our same-origin proxy. BASE_RPC_URL stays server-side.
+    [base.id]: http("/api/rpc", {
+      batch: false,
+      retryCount: 1,
+      timeout: 20_000,
+    }),
   },
   connectors: [
     injected({
