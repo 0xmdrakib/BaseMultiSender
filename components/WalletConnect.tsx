@@ -65,6 +65,24 @@ function WalletLogo({ connector }: { connector: WalletConnector }) {
     );
   }
 
+  if (connector.id.toLowerCase() === "baseaccount") {
+    return (
+      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
+        <svg
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+          className="h-7 w-7"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M0 2.014C0 1.58105 0 1.36457 0.0815779 1.19805C0.159686 1.03861 0.288611 0.909686 0.448049 0.831578C0.61457 0.75 0.831047 0.75 1.264 0.75H14.736C15.169 0.75 15.3854 0.75 15.552 0.831578C15.7114 0.909686 15.8403 1.03861 15.9184 1.19805C16 1.36457 16 1.58105 16 2.014V15.486C16 15.919 16 16.1354 15.9184 16.302C15.8403 16.4614 15.7114 16.5903 15.552 16.6684C15.3854 16.75 15.169 16.75 14.736 16.75H1.264C0.831047 16.75 0.61457 16.75 0.448049 16.6684C0.288611 16.5903 0.159686 16.4614 0.0815779 16.302C0 16.1354 0 15.919 0 15.486V2.014Z"
+            fill="#0000FF"
+          />
+        </svg>
+      </span>
+    );
+  }
+
   return (
     <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/70 bg-slate-950 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(15,23,42,0.08)]">
       {connector.name.slice(0, 1).toUpperCase() || "W"}
