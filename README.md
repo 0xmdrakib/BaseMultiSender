@@ -1,6 +1,6 @@
-# Base MultiSender
+# Bulk Sender
 
-Base MultiSender is a non-custodial batch sender for distributing ETH and ERC-20 tokens on Base.
+Bulk Sender is a non-custodial batch sender for distributing ETH and ERC-20 tokens on Base.
 
 **Live app:** https://bulksender.rakibhq.xyz
 
@@ -8,7 +8,7 @@ Base MultiSender is a non-custodial batch sender for distributing ETH and ERC-20
 
 ## Overview
 
-Base MultiSender helps creators, communities, teams, and DAO operators send funds to many wallets without paying an extra protocol fee.
+Bulk Sender helps creators, communities, teams, and DAO operators send funds to many wallets without paying an extra protocol fee.
 
 The app supports both direct ETH batch sends and ERC-20 batch sends through Permit2. Users can paste recipient lists manually, upload a CSV file, review totals, confirm the transaction from their wallet, and track receipts for each successful batch.
 
@@ -72,7 +72,7 @@ The app also supports address-only rows when using split amount mode.
 - Wagmi
 - viem
 - Uniswap Permit2 SDK
-- Base Account connector
+- Injected and EIP-6963 wallet discovery
 - TanStack Query
 - PapaParse
 

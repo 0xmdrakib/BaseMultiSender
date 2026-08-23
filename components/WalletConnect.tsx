@@ -58,7 +58,7 @@ function dedupeConnectors(connectors: readonly WalletConnector[]) {
 function WalletLogo({ connector }: { connector: WalletConnector }) {
   if (connector.icon) {
     return (
-      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={connector.icon} alt="" className="h-7 w-7 object-contain" />
       </span>
@@ -67,7 +67,7 @@ function WalletLogo({ connector }: { connector: WalletConnector }) {
 
   if (connector.id.toLowerCase() === "baseaccount") {
     return (
-      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-none">
         <svg
           viewBox="0 0 16 16"
           aria-hidden="true"
@@ -85,7 +85,7 @@ function WalletLogo({ connector }: { connector: WalletConnector }) {
 
   if (connector.id.toLowerCase() === "walletconnect") {
     return (
-      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-[#3396ff]/35 bg-[#3396ff] shadow-[0_2px_6px_rgba(51,150,255,0.12)]">
+      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-[#3396ff] bg-[#3396ff] shadow-none">
         <svg
           viewBox="0 0 96 67"
           aria-hidden="true"
@@ -99,7 +99,7 @@ function WalletLogo({ connector }: { connector: WalletConnector }) {
   }
 
   return (
-    <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-800 bg-slate-950 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]">
+    <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-800 bg-slate-950 text-sm font-semibold text-white shadow-none">
       {connector.name.slice(0, 1).toUpperCase() || "W"}
     </span>
   );
@@ -162,7 +162,7 @@ export default function WalletConnect() {
             type="button"
             onClick={() => switchChain({ chainId: base.id })}
             disabled={isSwitchingChain}
-            className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-sm font-semibold text-amber-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-xl transition hover:bg-amber-100/90 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 shadow-none transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSwitchingChain ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Switch Base <ChevronDown className="h-4 w-4" />
@@ -170,10 +170,10 @@ export default function WalletConnect() {
         ) : null}
 
         <div
-          className="inline-flex max-w-[210px] items-center gap-2 rounded-full border border-slate-200/85 bg-white/[0.76] px-3 py-2 text-sm font-semibold text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.035),0_3px_8px_rgba(15,23,42,0.025),inset_0_1px_0_rgba(255,255,255,0.96)] backdrop-blur-xl sm:max-w-none"
+          className="inline-flex max-w-[210px] items-center gap-2 rounded-full border border-slate-200/85 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-none sm:max-w-none"
           title={address}
         >
-          <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" aria-hidden />
+          <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
           <span className="truncate font-mono">{shortAddress(address)}</span>
           <button
             type="button"
@@ -203,7 +203,7 @@ export default function WalletConnect() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="wallet-dialog-title"
-            className="relative w-full max-w-sm rounded-[30px] border border-slate-200/80 bg-[#fbfaf4]/95 p-4 shadow-[0_2px_4px_rgba(15,23,42,0.05),0_18px_44px_rgba(15,23,42,0.13),inset_0_1px_0_rgba(255,255,255,0.96)] backdrop-blur-2xl sm:p-5"
+            className="relative w-full max-w-sm rounded-[30px] border border-slate-200/80 bg-[#fbfaf4] p-4 shadow-none sm:p-5"
           >
             <div className="px-1 pb-3">
               <h2 id="wallet-dialog-title" className="text-lg font-semibold tracking-[-0.02em] text-slate-950">
@@ -228,7 +228,7 @@ export default function WalletConnect() {
                       type="button"
                       onClick={() => void connectToBrowserWallet(connector)}
                       disabled={isPending || Boolean(connectingId)}
-                      className="group flex w-full items-center gap-3 rounded-[18px] border border-slate-200/80 bg-white/55 px-3 py-3 text-left text-sm font-semibold text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] transition hover:-translate-y-0.5 hover:border-slate-300/90 hover:bg-white/90 hover:shadow-[0_1px_2px_rgba(15,23,42,0.04),0_5px_12px_rgba(15,23,42,0.035)] disabled:cursor-not-allowed disabled:opacity-70"
+                      className="group flex w-full items-center gap-3 rounded-[18px] border border-slate-200/80 bg-white px-3 py-3 text-left text-sm font-semibold text-slate-700 shadow-none transition hover:-translate-y-0.5 hover:border-slate-300/90 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       <WalletLogo connector={connector} />
                       <span className="min-w-0 flex-1 truncate">{connector.name}</span>
@@ -264,9 +264,9 @@ export default function WalletConnect() {
           setError(null);
           setOpen(true);
         }}
-        className="group inline-flex items-center gap-2 rounded-full border border-slate-200/85 bg-white/[0.70] px-3 py-2 text-sm font-semibold text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.035),0_3px_8px_rgba(15,23,42,0.025),inset_0_1px_0_rgba(255,255,255,0.96)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300/80 hover:bg-white/[0.94] hover:text-slate-950 hover:shadow-[0_1px_2px_rgba(15,23,42,0.04),0_5px_12px_rgba(15,23,42,0.035)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/[0.12] disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
+        className="group inline-flex items-center gap-2 rounded-full border border-slate-200/85 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-none transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300/80 hover:bg-slate-50 hover:text-slate-950 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/[0.12] disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
       >
-        <span className="h-2 w-2 rounded-full bg-[#020617] shadow-[0_0_0_4px_rgba(2,6,23,0.07)]" aria-hidden />
+        <span className="h-2 w-2 rounded-full bg-[#020617]" aria-hidden />
         <Wallet className="h-4 w-4 text-slate-500 transition group-hover:text-slate-700" />
         <span className="hidden sm:inline">Connect Wallet</span>
         <span className="sm:hidden">Connect</span>

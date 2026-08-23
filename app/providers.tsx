@@ -4,7 +4,7 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { base } from "wagmi/chains";
-import { baseAccount, injected, walletConnect } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
 
 type WalletConnectLogger = NonNullable<Parameters<typeof walletConnect>[0]["logger"]>;
 
@@ -45,9 +45,6 @@ const config = createConfig({
     injected({
       shimDisconnect: true,
     }),
-    baseAccount({
-      appName: "Base MultiSender",
-    }),
     ...(walletConnectProjectId
       ? [
           walletConnect({
@@ -55,7 +52,7 @@ const config = createConfig({
             logger: createWalletConnectLogger(),
             showQrModal: true,
             metadata: {
-              name: "Base MultiSender",
+              name: "Bulk Sender",
               description: "0 protocol fee multi-sender on Base",
               url: "https://bulksender.rakibhq.xyz",
               icons: ["https://bulksender.rakibhq.xyz/icon.png"],

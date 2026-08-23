@@ -13,7 +13,7 @@ export function Badge({ className, tone = "neutral", ...props }: React.HTMLAttri
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium shadow-[0_1px_2px_rgba(15,23,42,0.025),inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl",
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium shadow-none",
         tones[tone],
         className
       )}
