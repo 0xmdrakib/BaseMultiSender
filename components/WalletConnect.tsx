@@ -48,7 +48,11 @@ function dedupeConnectors(connectors: readonly WalletConnector[]) {
     }
   }
 
-  return Array.from(unique.values());
+  const deduped = Array.from(unique.values());
+  return [
+    ...deduped.filter((connector) => connector.id.toLowerCase() !== "walletconnect"),
+    ...deduped.filter((connector) => connector.id.toLowerCase() === "walletconnect"),
+  ];
 }
 
 function WalletLogo({ connector }: { connector: WalletConnector }) {
