@@ -34,11 +34,7 @@ function connectorKey(connector: WalletConnector) {
 }
 
 function dedupeConnectors(connectors: readonly WalletConnector[]) {
-  const browserConnectors = connectors.filter((connector) => {
-    const id = connector.id.toLowerCase();
-    const name = connector.name.toLowerCase();
-    return !id.includes("walletconnect") && !name.includes("walletconnect");
-  });
+  const browserConnectors = [...connectors];
 
   const hasNamedInjectedWallet = browserConnectors.some((connector) => !isGenericInjected(connector));
   const candidates = hasNamedInjectedWallet ? browserConnectors.filter((connector) => !isGenericInjected(connector)) : browserConnectors;
@@ -78,6 +74,21 @@ function WalletLogo({ connector }: { connector: WalletConnector }) {
             d="M0 2.014C0 1.58105 0 1.36457 0.0815779 1.19805C0.159686 1.03861 0.288611 0.909686 0.448049 0.831578C0.61457 0.75 0.831047 0.75 1.264 0.75H14.736C15.169 0.75 15.3854 0.75 15.552 0.831578C15.7114 0.909686 15.8403 1.03861 15.9184 1.19805C16 1.36457 16 1.58105 16 2.014V15.486C16 15.919 16 16.1354 15.9184 16.302C15.8403 16.4614 15.7114 16.5903 15.552 16.6684C15.3854 16.75 15.169 16.75 14.736 16.75H1.264C0.831047 16.75 0.61457 16.75 0.448049 16.6684C0.288611 16.5903 0.159686 16.4614 0.0815779 16.302C0 16.1354 0 15.919 0 15.486V2.014Z"
             fill="#0000FF"
           />
+        </svg>
+      </span>
+    );
+  }
+
+  if (connector.id.toLowerCase() === "walletconnect") {
+    return (
+      <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-[#3396ff]/30 bg-[#3396ff] shadow-[0_8px_18px_rgba(51,150,255,0.22)]">
+        <svg
+          viewBox="0 0 96 67"
+          aria-hidden="true"
+          className="h-5 w-7 fill-white"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M25.32 18.8a32.56 32.56 0 0 1 45.36 0l1.5 1.47c.63.62.63 1.61 0 2.22l-5.15 5.05c-.31.3-.82.3-1.14 0l-2.07-2.03a22.71 22.71 0 0 0-31.64 0l-2.22 2.18c-.31.3-.82.3-1.14 0l-5.15-5.05a1.55 1.55 0 0 1 0-2.22l1.65-1.62Zm56.02 10.44 4.59 4.5c.63.6.63 1.6 0 2.21l-20.7 20.26c-.62.61-1.63.61-2.26 0L48.28 41.83a.4.4 0 0 0-.56 0L33.03 56.21c-.63.61-1.64.61-2.27 0L10.07 35.95a1.55 1.55 0 0 1 0-2.22l4.59-4.5a1.63 1.63 0 0 1 2.27 0L31.6 43.63a.4.4 0 0 0 .57 0l14.69-14.38a1.63 1.63 0 0 1 2.26 0l14.69 14.38a.4.4 0 0 0 .57 0l14.68-14.38a1.63 1.63 0 0 1 2.27 0Z" />
         </svg>
       </span>
     );

@@ -84,6 +84,12 @@ Set `BASE_RPC_URL` to a dedicated Base Mainnet HTTPS RPC endpoint in the server 
 
 ---
 
+## WalletConnect
+
+Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` to the project ID created in the Reown Dashboard. Add `https://bulksender.rakibhq.xyz` to that project's origin allowlist. The WalletConnect option and QR modal are enabled only when this value is present.
+
+---
+
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
