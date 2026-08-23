@@ -23,7 +23,7 @@ The app supports both direct ETH batch sends and ERC-20 batch sends through Perm
 - Exact ERC-20 approval flow instead of unlimited approvals
 - Token symbol, decimals, allowance, recipient count, total, and fee review before sending
 - Receipt table with transaction hashes and BaseScan links
-- Mini app support for Farcaster and Base app environments
+- Standard web app support for Base App and browser wallets
 - Optional paymaster flow for wallets that support sponsored calls
 - Builder Code attribution support for Base ecosystem tracking
 
@@ -72,7 +72,7 @@ The app also supports address-only rows when using split amount mode.
 - Wagmi
 - viem
 - Uniswap Permit2 SDK
-- Farcaster Mini App SDK
+- Base Account connector
 - TanStack Query
 - PapaParse
 

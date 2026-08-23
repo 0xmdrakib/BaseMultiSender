@@ -3,33 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Loader2, Power, Wallet } from "lucide-react";
-import { sdk } from "@farcaster/miniapp-sdk";
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
 import { base } from "wagmi/chains";
 
 type WalletConnector = ReturnType<typeof useConnect>["connectors"][number];
-
-function useIsMiniApp() {
-  const [isMiniApp, setIsMiniApp] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const ok = await sdk.isInMiniApp();
-        if (!cancelled) setIsMiniApp(Boolean(ok));
-      } catch {
-        if (!cancelled) setIsMiniApp(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return isMiniApp;
-}
 
 function shortAddress(address?: string) {
   if (!address) return "";
@@ -60,7 +37,7 @@ function dedupeConnectors(connectors: readonly WalletConnector[]) {
   const browserConnectors = connectors.filter((connector) => {
     const id = connector.id.toLowerCase();
     const name = connector.name.toLowerCase();
-    return !id.includes("walletconnect") && !name.includes("walletconnect") && !id.includes("farcaster") && !name.includes("farcaster");
+    return !id.includes("walletconnect") && !name.includes("walletconnect");
   });
 
   const hasNamedInjectedWallet = browserConnectors.some((connector) => !isGenericInjected(connector));
@@ -96,7 +73,6 @@ function WalletLogo({ connector }: { connector: WalletConnector }) {
 }
 
 export default function WalletConnect() {
-  const isMiniApp = useIsMiniApp();
   const { address, chainId, isConnected } = useAccount();
   const { connectors, connectAsync, isPending } = useConnect();
   const { disconnect } = useDisconnect();
@@ -119,18 +95,6 @@ export default function WalletConnect() {
 
   const availableConnectors = useMemo(() => dedupeConnectors(connectors), [connectors]);
   const isBaseChain = chainId === base.id;
-
-  const connectToMiniApp = async () => {
-    const connector = connectors[0];
-    if (!connector) return;
-
-    setError(null);
-    try {
-      await connectAsync({ connector, chainId: base.id });
-    } catch {
-      // User cancelled or host wallet is not available.
-    }
-  };
 
   const connectToBrowserWallet = async (connector: WalletConnector) => {
     const id = connectorKey(connector);
@@ -193,7 +157,7 @@ export default function WalletConnect() {
   }
 
   const walletDialog =
-    open && !isMiniApp ? (
+    open ? (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
@@ -264,18 +228,13 @@ export default function WalletConnect() {
       <button
         type="button"
         onClick={() => {
-          if (isMiniApp) {
-            void connectToMiniApp();
-            return;
-          }
           setError(null);
           setOpen(true);
         }}
-        disabled={Boolean(isMiniApp && isPending)}
         className="group inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/[0.58] px-3 py-2 text-sm font-semibold text-slate-700 shadow-[0_10px_26px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-2xl transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/[0.86] hover:text-slate-950 hover:shadow-[0_16px_34px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.96)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/[0.12] disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
       >
         <span className="h-2 w-2 rounded-full bg-[#020617] shadow-[0_0_0_4px_rgba(2,6,23,0.08),0_0_18px_rgba(2,6,23,0.22)]" aria-hidden />
-        {isMiniApp && isPending ? <Loader2 className="h-4 w-4 animate-spin text-slate-500" /> : <Wallet className="h-4 w-4 text-slate-500 transition group-hover:text-slate-700" />}
+        <Wallet className="h-4 w-4 text-slate-500 transition group-hover:text-slate-700" />
         <span className="hidden sm:inline">Connect Wallet</span>
         <span className="sm:hidden">Connect</span>
       </button>

@@ -17,7 +17,6 @@ import {
 import { publicActionsL2 } from "viem/op-stack";
 import { AllowanceTransfer } from "@uniswap/permit2-sdk";
 import Papa from "papaparse";
-import { sdk } from "@farcaster/miniapp-sdk";
 
 import { getRpcRequester, sendSponsoredCalls, supportsPaymasterService } from "@/lib/gasless";
 import { appendBuilderCodesToCalldata, isBuilderCodesEnabled } from "@/lib/builderCodes";
@@ -27,33 +26,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Check, Copy, ExternalLink, Loader2, Share2, Upload } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Upload } from "lucide-react";
 import WalletConnectButton from "@/components/WalletConnect";
-
-const APP_URL = "https://multisender.online/";
-const SHARE_TEXT = "I just used Base Multi Sender";
-
-function useIsMiniApp() {
-  const [isMiniApp, setIsMiniApp] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const ok = await sdk.isInMiniApp();
-        if (!cancelled) setIsMiniApp(Boolean(ok));
-      } catch {
-        if (!cancelled) setIsMiniApp(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return isMiniApp;
-}
 
 // ---------- Config (env first, validated, with safe fallbacks) ----------
 const DEFAULT_MULTISENDER_ADDRESS = "0xAd7d4483Eb4352B71aCc8C3C81482079b0636d55" as const;
@@ -350,7 +324,6 @@ export default function Home() {
   useEffect(() => setMounted(true), []);
 
   const [mode, setMode] = useState<Mode>("ETH");
-	const isMiniApp = useIsMiniApp();
 
   // Recipients editor
   const [rawList, setRawList] = useState("");
@@ -994,30 +967,6 @@ export default function Home() {
 
   const editorHeight = `${viewportLines * lineHeightPx}px`;
 
-	async function shareFromMiniApp() {
-		// Only used when running inside a Mini App host.
-		try {
-			await sdk.actions.composeCast({ text: SHARE_TEXT, embeds: [APP_URL] as [string] });
-			return;
-		} catch {
-			// Fallbacks below.
-		}
-
-		try {
-				if (typeof navigator !== "undefined" && "share" in navigator) {
-					const nav = navigator as Navigator & { share?: (data: any) => Promise<void> };
-					if (typeof nav.share === "function") {
-						await nav.share({ text: SHARE_TEXT, url: APP_URL });
-						return;
-					}
-				}
-		} catch {
-			// ignore
-		}
-
-		await copyToClipboard(`${SHARE_TEXT} ${APP_URL}`);
-	}
-
   if (!mounted) {
     // Avoid hydration flicker / mismatches by rendering a stable placeholder on first paint.
     return (
@@ -1434,17 +1383,6 @@ export default function Home() {
                       >
                         {copied === "contract" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
-	                      {isMiniApp ? (
-	                        <Button
-	                          type="button"
-	                          variant="outline"
-	                          aria-label="Share"
-	                          className="h-8 w-8 p-0 rounded-xl"
-	                          onClick={() => void shareFromMiniApp()}
-	                        >
-	                          <Share2 className="h-4 w-4" />
-	                        </Button>
-	                      ) : null}
                     </div>
 
                     {mode === "ERC20" && (
