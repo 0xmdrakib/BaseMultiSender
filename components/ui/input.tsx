@@ -7,9 +7,9 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
       <input
         ref={ref}
         className={cn(
-          "w-full rounded-[18px] border border-white/70 bg-white/[0.66] px-4 py-3 text-sm text-slate-900 backdrop-blur-xl " +
-            "shadow-[0_8px_22px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.88)] outline-none placeholder:text-slate-400 " +
-            "transition-all duration-200 focus:border-white focus:bg-white/[0.84] focus:ring-2 focus:ring-slate-900/[0.075]",
+          "w-full rounded-[18px] border border-slate-200/90 bg-slate-50/[0.68] px-4 py-3 text-sm text-slate-900 backdrop-blur-xl " +
+            "shadow-[inset_0_2px_5px_rgba(15,23,42,0.045),inset_0_-1px_0_rgba(255,255,255,0.94)] outline-none placeholder:text-slate-400 " +
+            "transition-all duration-200 focus:border-blue-300/65 focus:bg-white/[0.90] focus:ring-2 focus:ring-blue-500/[0.09]",
           className
         )}
         {...props}
@@ -25,9 +25,9 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
       <textarea
         ref={ref}
         className={cn(
-          "w-full min-h-[180px] rounded-[20px] border border-white/70 bg-white/[0.66] p-4 font-mono text-sm text-slate-900 backdrop-blur-xl " +
-            "shadow-[0_8px_22px_rgba(15,23,42,0.035),inset_0_1px_0_rgba(255,255,255,0.88)] outline-none placeholder:text-slate-400 " +
-            "transition-all duration-200 focus:border-white focus:bg-white/[0.84] focus:ring-2 focus:ring-slate-900/[0.075]",
+          "w-full min-h-[180px] rounded-[20px] border border-slate-200/90 bg-slate-50/[0.68] p-4 font-mono text-sm text-slate-900 backdrop-blur-xl " +
+            "shadow-[inset_0_2px_5px_rgba(15,23,42,0.045),inset_0_-1px_0_rgba(255,255,255,0.94)] outline-none placeholder:text-slate-400 " +
+            "transition-all duration-200 focus:border-blue-300/65 focus:bg-white/[0.90] focus:ring-2 focus:ring-blue-500/[0.09]",
           className
         )}
         {...props}

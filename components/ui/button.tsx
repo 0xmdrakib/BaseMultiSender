@@ -34,15 +34,15 @@ export function Button({
       "hover:-translate-y-0.5 hover:from-slate-700 hover:to-slate-950 hover:shadow-[0_18px_40px_rgba(2,6,23,0.28),inset_0_1px_0_rgba(255,255,255,0.18)] " +
       "before:absolute before:inset-x-3 before:top-0 before:h-px before:bg-white/30",
     secondary:
-      "border border-white/70 bg-white/[0.72] text-slate-700 backdrop-blur-xl " +
-      "shadow-[0_10px_24px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.92)] " +
-      "hover:-translate-y-0.5 hover:bg-white/90 hover:text-slate-950",
+      "border border-slate-200/85 bg-white/[0.76] text-slate-700 backdrop-blur-xl " +
+      "shadow-[0_9px_22px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.10)] " +
+      "hover:-translate-y-0.5 hover:border-slate-300/80 hover:bg-white/95 hover:text-slate-950",
     ghost:
       "border border-transparent bg-transparent text-slate-600 hover:bg-white/[0.58] hover:text-slate-950 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]",
     outline:
-      "border border-white/70 bg-white/[0.50] text-slate-700 backdrop-blur-xl " +
-      "shadow-[0_8px_22px_rgba(15,23,42,0.045),inset_0_1px_0_rgba(255,255,255,0.9)] " +
-      "hover:-translate-y-0.5 hover:border-white hover:bg-white/[0.82] hover:text-slate-950 hover:shadow-[0_14px_30px_rgba(15,23,42,0.075),inset_0_1px_0_rgba(255,255,255,0.95)]",
+      "border border-slate-200/85 bg-white/[0.58] text-slate-700 backdrop-blur-xl " +
+      "shadow-[0_7px_18px_rgba(15,23,42,0.045),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.09)] " +
+      "hover:-translate-y-0.5 hover:border-slate-300/85 hover:bg-white/[0.90] hover:text-slate-950 hover:shadow-[0_13px_28px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,1)]",
     danger:
       "border border-rose-200/80 bg-rose-50/80 text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)] hover:bg-rose-100/90",
   };

@@ -5,7 +5,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={cn(
-        "premium-glass premium-shine relative overflow-hidden rounded-[30px] ring-1 ring-slate-900/[0.025]",
+        "premium-glass premium-shine premium-edge relative overflow-hidden rounded-[30px]",
         className
       )}
       {...props}

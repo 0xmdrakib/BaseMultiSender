@@ -984,9 +984,9 @@ export default function Home() {
       <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 sm:py-10">
         <div className="relative mx-auto max-w-6xl">
           {/* Header */}
-          <div className="premium-glass-strong premium-shine flex flex-col gap-4 rounded-[32px] p-4 ring-1 ring-slate-900/[0.025] sm:flex-row sm:items-start sm:justify-between sm:p-6">
+          <div className="premium-glass-strong premium-shine premium-edge premium-edge--hero flex flex-col gap-4 rounded-[32px] p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div className="flex items-start gap-3">
-              <div className="relative mt-0.5 h-11 w-11 overflow-hidden rounded-[20px] border border-white/80 bg-white/[0.78] shadow-[0_12px_28px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.95)]">
+              <div className="relative mt-0.5 h-11 w-11 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white/[0.82] shadow-[0_10px_24px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.10)]">
                 <img
                   src="/logo-mark.png"
                   alt="Multi Sender"
@@ -1012,11 +1012,11 @@ export default function Home() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {/* Left: composer */}
-            <Card className="lg:col-span-7">
+            <Card className="premium-edge--blue lg:col-span-7">
               <CardHeader className="pb-4 px-4 pt-4 sm:px-6 sm:pt-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <div className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/[0.52] p-1 shadow-[0_10px_24px_rgba(15,23,42,0.045),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl">
+                    <div className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/[0.58] p-1 shadow-[0_8px_20px_rgba(15,23,42,0.05),inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(100,116,139,0.08)] backdrop-blur-xl">
                       <button
                         type="button"
                         onClick={() => setMode("ETH")}
@@ -1167,7 +1167,7 @@ export default function Home() {
 	                    </div>
 	                  </div>
 
-                  <div className="relative overflow-hidden rounded-[24px] border border-white/70 bg-white/[0.54] shadow-[0_14px_34px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl">
+                  <div className="premium-recess relative overflow-hidden rounded-[24px]">
                     <div className="flex min-w-0">
                       <div
                         aria-hidden
