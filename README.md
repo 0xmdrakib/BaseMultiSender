@@ -76,20 +76,6 @@ The app also supports address-only rows when using split amount mode.
 - TanStack Query
 - PapaParse
 
----
-
-## Private Base RPC
-
-Set `BASE_RPC_URL` to a dedicated Base Mainnet HTTPS RPC endpoint in the server environment. The browser connects only to the same-origin `/api/rpc` proxy, so the provider URL and API key are never included in the client bundle. Do not expose this value through a `NEXT_PUBLIC_*` variable.
-
----
-
-## WalletConnect
-
-Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` to the project ID created in the Reown Dashboard. Add `https://bulksender.rakibhq.xyz` to that project's origin allowlist. The WalletConnect option and QR modal are enabled only when this value is present.
-
----
-
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
